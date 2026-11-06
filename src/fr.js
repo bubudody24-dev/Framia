@@ -19942,6 +19942,10 @@ function cg() {
       for (; Xn.current && Date.now() < i; )
         await new Promise((s) => setTimeout(s, 25));
       ul("home");
+      (Ct.current
+        ? Vo()
+        : location.search.includes("room=") &&
+          window.history.replaceState(null, "", location.pathname));
       try {
         Nl(await Qn());
       } catch {}
