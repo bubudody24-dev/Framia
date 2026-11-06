@@ -39,7 +39,7 @@ async function readJson(request, maxBytes = 15_000_000) {
 
 function roomCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
   return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join('');
 }
 
@@ -113,7 +113,7 @@ async function api(request, env, signedIn) {
         }
       }
       const code = path[2]?.toUpperCase();
-      if (!code || !/^[A-Z2-9]{8}$/.test(code)) return error('Invalid room', 400);
+      if (!code || !/^[A-Z2-9]{6}(?:[A-Z2-9]{2})?$/.test(code)) return error('Invalid room', 400);
       if (path.length === 4 && path[3] === 'join' && request.method === 'POST') {
         const exists = await env.DB.prepare('SELECT 1 FROM framia_rooms_v2 WHERE code=?').bind(code).first();
         if (!exists) return error('Room not found', 404);
@@ -169,7 +169,7 @@ async function api(request, env, signedIn) {
     }
     if (path[1] === 'realtime' && path[2] === 'ticket' && request.method === 'POST') {
       const { room } = await readJson(request, 10_000);
-      const code = typeof room === 'string' && /^project:([A-Z2-9]{8})$/.exec(room)?.[1];
+      const code = typeof room === 'string' && /^project:([A-Z2-9]{6}(?:[A-Z2-9]{2})?)$/.exec(room)?.[1];
       if (!code || !(await member(env, code, user.sub))) return error('Room forbidden', 403);
       const ticket = await createRealtimeTicket(env, { room, userId: user.sub, origin: env.APP_ORIGIN, publish: true, presence: true });
       return json(ticket);

@@ -57,22 +57,90 @@ const xo = (o, d) => R1("readwrite", (v) => v.put(d, o)),
       ((f.onload = () => d(f.result)), (f.onerror = v), f.readAsDataURL(o));
     });
 async function Bv(o) {
-  const d = {};
+  const d = new Map();
   for (const f of o.clips || []) {
-    if (!f.mediaId) continue;
+    if (!f.mediaId || d.has(f.mediaId)) continue;
     const g = await pm(f.mediaId);
     if (!g) throw Error(`Mídia indisponível: ${f.name || f.mediaId}`);
-    d[f.mediaId] = await a1(g);
+    d.set(f.mediaId, g);
   }
-  const v = await fetch("/brand/framia-logo.webp");
-  if (!v.ok) throw Error("Logo indisponível");
   return {
     format: "framia",
-    version: 1,
-    icon: await a1(await v.blob()),
+    version: 2,
     project: { ...o, clips: (o.clips || []).map(({ url: f, ...g }) => g) },
     media: d,
   };
+}
+const FRAMIA_FILE_MAGIC = "FRAMIA2\n";
+async function framiaGzip(o) {
+  if (typeof CompressionStream !== "function") return null;
+  try {
+    return new Uint8Array(
+      await new Response(
+        new Blob([o]).stream().pipeThrough(new CompressionStream("gzip")),
+      ).arrayBuffer(),
+    );
+  } catch {
+    return null;
+  }
+}
+async function framiaGunzip(o) {
+  if (typeof DecompressionStream !== "function")
+    throw Error("Compressão não suportada neste navegador");
+  return new Uint8Array(
+    await new Response(
+      new Blob([o]).stream().pipeThrough(new DecompressionStream("gzip")),
+    ).arrayBuffer(),
+  );
+}
+async function framiaPackProject(o) {
+  const d = new TextEncoder(),
+    v = [],
+    f = [];
+  let g = 0;
+  for (const [b, N] of o.media) {
+    const M = new Uint8Array(await N.arrayBuffer());
+    (v.push({
+      id: b,
+      type: N.type || "application/octet-stream",
+      offset: g,
+      length: M.length,
+    }),
+      f.push(M),
+      (g += M.length));
+  }
+  const b = d.encode(
+      JSON.stringify({
+        format: "framia",
+        version: 2,
+        project: o.project,
+        media: v,
+      }),
+    ),
+    N = await framiaGzip(b),
+    M = d.encode(FRAMIA_FILE_MAGIC),
+    B = new Uint8Array(5);
+  (B.set([N ? 1 : 0], 0), new DataView(B.buffer).setUint32(1, (N || b).length, !0));
+  return new Blob([M, B, N || b, ...f], { type: "application/x-framia" });
+}
+async function framiaUnpackProject(o) {
+  const d = await o.arrayBuffer();
+  if (d.byteLength < 13) return null;
+  if (new TextDecoder().decode(new Uint8Array(d, 0, 8)) !== FRAMIA_FILE_MAGIC)
+    return null;
+  const v = new DataView(d),
+    f = new Uint8Array(d, 8, 1)[0],
+    g = v.getUint32(9, !0),
+    b = new Uint8Array(d, 13, g),
+    N = JSON.parse(new TextDecoder().decode(f ? await framiaGunzip(b) : b));
+  if (!N || N.format !== "framia" || !N.project)
+    throw Error("Formato Framia inválido");
+  const M = {};
+  for (const B of N.media || []) {
+    const q = new Uint8Array(d, 13 + g + B.offset, B.length);
+    M[B.id] = await a1(new Blob([q], { type: B.type }));
+  }
+  return { format: "framia", version: 1, project: N.project, media: M };
 }
 async function jv(o) {
   var f, g, b, N, M, B;
@@ -16933,10 +17001,157 @@ function Zp() {
   };
 }
 const Kp = "framia-project-library",
-  Jp = 1;
+  Jp = 1,
+  FRAMIA_ACCOUNTS_KEY = "framia-accounts",
+  FRAMIA_OWNER_KEY = "framia-local-owner",
+  FRAMIA_MAX_ACCOUNTS = 3;
+let framiaAccountScope = "";
+function framiaScopeId(o) {
+  const d = String(o || "");
+  let v = 5381;
+  for (let f = 0; f < d.length; f++) v = ((v * 33) ^ d.charCodeAt(f)) >>> 0;
+  return `a${v.toString(36)}`;
+}
+function framiaScopedKey(o, d = framiaAccountScope) {
+  return d ? `${o}:${d}` : o;
+}
+function framiaAccountScopeFor(o) {
+  return o && typeof o.sub === "string" ? framiaScopeId(o.sub) : "";
+}
+function framiaReadAccounts() {
+  try {
+    const o = JSON.parse(localStorage.getItem(FRAMIA_ACCOUNTS_KEY));
+    return Array.isArray(o)
+      ? o
+          .filter(
+            (d) =>
+              d &&
+              typeof d.id === "string" &&
+              (typeof d.name === "string" || typeof d.email === "string"),
+          )
+          .slice(0, FRAMIA_MAX_ACCOUNTS)
+      : [];
+  } catch {
+    return [];
+  }
+}
+function framiaWriteAccounts(o) {
+  try {
+    localStorage.setItem(
+      FRAMIA_ACCOUNTS_KEY,
+      JSON.stringify(o.slice(0, FRAMIA_MAX_ACCOUNTS)),
+    );
+  } catch {}
+}
+function framiaRememberAccount(o) {
+  if (!o || typeof o.sub !== "string") return framiaReadAccounts();
+  const d = {
+      id: o.sub,
+      name: typeof o.name === "string" ? o.name : "",
+      email: typeof o.email === "string" ? o.email : "",
+      picture: typeof o.picture === "string" ? o.picture : "",
+    },
+    v = framiaReadAccounts().filter((f) => f.id !== d.id);
+  let f = [d, ...v];
+  (f.length > FRAMIA_MAX_ACCOUNTS &&
+    (f = [d, ...v.slice(0, FRAMIA_MAX_ACCOUNTS - 1)]),
+    framiaWriteAccounts(f));
+  return f.slice(0, FRAMIA_MAX_ACCOUNTS);
+}
+function framiaForgetAccount(o) {
+  const d = framiaReadAccounts().filter((v) => v.id !== o);
+  return (framiaWriteAccounts(d), d);
+}
+function framiaOpenStore(o) {
+  return new Promise((d, v) => {
+    const f = indexedDB.open(o, Jp);
+    ((f.onupgradeneeded = () => {
+      const g = f.result;
+      (g.objectStoreNames.contains("projects") ||
+        g.createObjectStore("projects", { keyPath: "id" }),
+        g.objectStoreNames.contains("summaries") ||
+          g.createObjectStore("summaries", { keyPath: "id" }));
+    }),
+      (f.onsuccess = () => d(f.result)),
+      (f.onerror = () => v(f.error)));
+  });
+}
+function framiaReadAll(o, d) {
+  return new Promise((v, f) => {
+    const g = o.transaction(d, "readonly").objectStore(d).getAll();
+    ((g.onsuccess = () => v(g.result || [])), (g.onerror = () => f(g.error)));
+  });
+}
+function framiaLoadBrushes() {
+  try {
+    const o = JSON.parse(localStorage.getItem(framiaScopedKey("framia-brushes")));
+    return Array.isArray(o) ? o : [];
+  } catch {
+    return [];
+  }
+}
+async function framiaClaimLocalData(o) {
+  if (!o) return !1;
+  let d = null;
+  try {
+    d = localStorage.getItem(FRAMIA_OWNER_KEY);
+    if (!d) localStorage.setItem(FRAMIA_OWNER_KEY, o);
+  } catch {
+    return !1;
+  }
+  if (d && d !== o) return !1;
+  for (const [v, f] of [
+    ["framia-brushes", `framia-brushes:${o}`],
+    ["framia-project", `framia-project:${o}`],
+  ])
+    try {
+      const g = localStorage.getItem(v);
+      g && (localStorage.setItem(f, g), localStorage.removeItem(v));
+    } catch {}
+  try {
+    const v = await framiaOpenStore(Kp),
+      [f, g] = await Promise.all([
+        framiaReadAll(v, "projects"),
+        framiaReadAll(v, "summaries"),
+      ]);
+    v.close();
+    if (f.length || g.length) {
+      const b = await framiaOpenStore(`${Kp}-${o}`);
+      await new Promise((N, M) => {
+        const B = b.transaction(["projects", "summaries"], "readwrite");
+        for (const q of f) B.objectStore("projects").put(q);
+        for (const q of g) B.objectStore("summaries").put(q);
+        ((B.oncomplete = () => N()), (B.onerror = () => M(B.error)));
+      });
+      (b.close(), await framiaClearStore(Kp));
+    }
+  } catch {}
+  return !0;
+}
+async function framiaClearStore(o) {
+  try {
+    const d = await framiaOpenStore(o);
+    await new Promise((v, f) => {
+      const g = d.transaction(["projects", "summaries"], "readwrite");
+      (g.objectStore("projects").clear(),
+        g.objectStore("summaries").clear(),
+        (g.oncomplete = () => v()),
+        (g.onerror = () => f(g.error)));
+    });
+    d.close();
+  } catch {}
+}
+async function framiaUseAccount(o) {
+  const d = framiaAccountScopeFor(o);
+  ((framiaAccountScope = d), await framiaClaimLocalData(d));
+  return d;
+}
 function Do() {
   return new Promise((o, d) => {
-    const v = indexedDB.open(Kp, Jp);
+    const v = indexedDB.open(
+      framiaAccountScope ? `${Kp}-${framiaAccountScope}` : Kp,
+      Jp,
+    );
     ((v.onupgradeneeded = () => {
       const f = v.result;
       (f.objectStoreNames.contains("projects") ||
@@ -17920,13 +18135,16 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       ],
       content: { [f]: { [g]: [] } },
       clips: [],
+      grid: !1,
+      gridSize: 12,
+      loop: !0,
       revision: 0,
     };
   };
 function ug() {
   var o, d;
   try {
-    let v = JSON.parse(localStorage.getItem("framia-project"));
+    let v = JSON.parse(localStorage.getItem(framiaScopedKey("framia-project")));
     return (o = v == null ? void 0 : v.frames) != null &&
       o.length &&
       (d = v == null ? void 0 : v.layers) != null &&
@@ -18024,7 +18242,10 @@ function Eu(o, d, v) {
               0,
               Math.PI * 2,
             )
-          : (o.moveTo(d.x, d.y), o.lineTo(d.x + d.w, d.y + d.h)),
+          : d.points && d.points.length > 1
+            ? (o.moveTo(d.points[0].x, d.points[0].y),
+              o.lineTo(d.points[1].x, d.points[1].y))
+            : (o.moveTo(d.x, d.y), o.lineTo(d.x + d.w, d.y + d.h)),
       o.stroke());
   o.restore();
 }
@@ -18200,7 +18421,7 @@ function cg() {
     }),
     [ll, qn] = Y.useState(() => {
       try {
-        return JSON.parse(localStorage.getItem("framia-brushes")) || [];
+        return framiaLoadBrushes();
       } catch {
         return [];
       }
@@ -18224,10 +18445,16 @@ function cg() {
     [nl, kc] = Y.useState(null),
     [Ri, _i] = Y.useState("offline"),
     [Mt, Ui] = Y.useState(null),
+    [authAvailable, setAuthAvailable] = Y.useState(!1),
+    [accounts, setAccounts] = Y.useState(framiaReadAccounts),
+    [accountMenu, setAccountMenu] = Y.useState(!1),
     [Au, Hi] = Y.useState({}),
+    [rc, setRc] = Y.useState({}),
     [Vc, wa] = Y.useState([]),
     [Et, Ut] = Y.useState(null),
-    [Tl, wu] = Y.useState(!0),
+    [Tl, wu] = Y.useState(
+      () => typeof window > "u" || window.innerWidth > 900,
+    ),
     [Bi, Ho] = Y.useState(() => {
       try {
         return JSON.parse(localStorage.getItem("framia-themes")) || [];
@@ -18243,6 +18470,7 @@ function cg() {
     Ct = Y.useRef(null),
     Du = Y.useRef(null),
     cl = Y.useRef(0),
+    cursorAt = Y.useRef(0),
     bt = Y.useRef(z),
     Gn = Y.useRef(z.revision || 0),
     Ml = Y.useRef(null),
@@ -18280,13 +18508,45 @@ function cg() {
         ? void 0
         : Dl[Ue == null ? void 0 : Ue.id]) || [];
   Y.useEffect(() => {
+    let active = !0;
     fetch("/api/me", { credentials: "same-origin" })
-      .then((i) => (i.ok ? i.json() : null))
-      .then((i) => {
-        (Ui((i == null ? void 0 : i.user) || null), Xc(!0));
+      .then(async (i) => {
+        setAuthAvailable(i.headers.get("content-type")?.includes("json") || !1);
+        const s = i.ok ? await i.json().catch(() => null) : null,
+          h = (s == null ? void 0 : s.user) || null;
+        (Ui(h),
+          setAccounts(framiaRememberAccount(h)),
+          await framiaUseAccount(h));
+        if (!active) return;
+        try {
+          (qn(framiaLoadBrushes()), Nl(await ym()));
+        } catch {}
+        Xc(!0);
       })
       .catch(() => Xc(!0));
+    return () => {
+      active = !1;
+    };
   }, []);
+  Y.useEffect(() => {
+    if (!accountMenu) return;
+    const i = (s) => {
+        var h;
+        (h = s.target) != null &&
+          h.closest &&
+          h.closest(".account-control") ||
+          setAccountMenu(!1);
+      },
+      s = (h) => h.key === "Escape" && setAccountMenu(!1);
+    return (
+      document.addEventListener("pointerdown", i),
+      window.addEventListener("keydown", s),
+      () => {
+        (document.removeEventListener("pointerdown", i),
+          window.removeEventListener("keydown", s));
+      }
+    );
+  }, [accountMenu]);
   const He = (i, s = "", h = null) => {
       (Cu({ title: i, body: s, action: h, id: Ke() }),
         setTimeout(
@@ -18451,7 +18711,9 @@ function cg() {
       var i, s;
       try {
         let h = await ym();
-        const y = localStorage.getItem("framia-project");
+        const y = localStorage.getItem(
+          framiaScopedKey("framia-project"),
+        );
         if (y) {
           const R = JSON.parse(y);
           (i = R == null ? void 0 : R.frames) != null &&
@@ -18461,7 +18723,7 @@ function cg() {
             ((R.id = R.id || bt.current.id),
             (R.frames = R.frames.map((U) => ({ ...U, duration: Jt(U) }))),
             h.some((U) => U.id === R.id) || (await hm(R)),
-            localStorage.removeItem("framia-project"),
+            localStorage.removeItem(framiaScopedKey("framia-project")),
             (h = await ym()));
         }
         Nl(h);
@@ -18535,7 +18797,10 @@ function cg() {
     }, [ft]),
     Y.useEffect(() => {
       try {
-        localStorage.setItem("framia-brushes", JSON.stringify(ll));
+        localStorage.setItem(
+          framiaScopedKey("framia-brushes"),
+          JSON.stringify(ll),
+        );
       } catch {}
     }, [ll]),
     Y.useEffect(() => {
@@ -18610,10 +18875,16 @@ function cg() {
         );
       let y;
       const R = (U) => {
-        (F((s + (U - i) / 1e3) % h), (y = requestAnimationFrame(R)));
+        const X = s + (U - i) / 1e3;
+        if (z.loop === !1 && X >= h) {
+          (F(h), Aa(!1));
+          return;
+        }
+        (F(z.loop === !1 ? Math.min(h, X) : X % h),
+          (y = requestAnimationFrame(R)));
       };
       return ((y = requestAnimationFrame(R)), () => cancelAnimationFrame(y));
-    }, [$t, z.frames, z.clips, z.fps]),
+    }, [$t, z.frames, z.clips, z.fps, z.loop]),
     Y.useEffect(() => le(gm(z.frames, K, z.fps)), [K, z.fps, z.frames]),
     Y.useLayoutEffect(() => {
       const i = Cl.current;
@@ -18755,11 +19026,13 @@ function cg() {
       Z,
       Au,
     ]));
-  const en = (i) => {
-      let s = Cl.current.getBoundingClientRect();
+  const en = (i, s = !1) => {
+      let h = Cl.current.getBoundingClientRect();
+      const y = ((i.clientX - h.left) / h.width) * z.width,
+        R = ((i.clientY - h.top) / h.height) * z.height;
       return {
-        x: Rt(((i.clientX - s.left) / s.width) * z.width, 0, z.width),
-        y: Rt(((i.clientY - s.top) / s.height) * z.height, 0, z.height),
+        x: s ? y : Rt(y, 0, z.width),
+        y: s ? R : Rt(R, 0, z.height),
         pressure: i.pressure || 0.5,
       };
     },
@@ -18790,7 +19063,7 @@ function cg() {
       (i.preventDefault(),
         i.stopPropagation(),
         i.currentTarget.setPointerCapture(i.pointerId));
-      const y = en(i);
+      const y = en(i, !0);
       Wt.current = {
         type: s,
         start: y,
@@ -18815,7 +19088,14 @@ function cg() {
     },
     Gt = (i) => {
       if (i.button !== 0 && i.button !== 1) return;
-      let s = en(i);
+      let s = en(i, pe === "transform" || pe === "select");
+      Ct.current &&
+        (cursorAt.current = Date.now()) &&
+        Ct.current.broadcast("cursor", {
+          x: s.x,
+          y: s.y,
+          name: (Mt == null ? void 0 : Mt.name) || "",
+        });
       if (
         (i.currentTarget.setPointerCapture(i.pointerId),
         pe === "pan" || i.button === 1 || i.altKey)
@@ -18830,7 +19110,7 @@ function cg() {
       if (!ze) return;
       if (pe === "transform" || pe === "select") {
         if (Ue.locked || !Ue.visible) return;
-        if (M && $e && !i.shiftKey) {
+        if (M && $e) {
           const R = G1(xi(M.box, $e)),
             U = R && Cm(R, s),
             X = M.box;
@@ -18841,9 +19121,11 @@ function cg() {
             U.y >= X.y &&
             U.y <= X.y + X.h
           ) {
-            Wt.current = { type: "move", start: s, base: $e };
-            return;
-          }
+            if (!i.shiftKey) {
+              Wt.current = { type: "move", start: s, base: $e };
+              return;
+            }
+          } else Gi();
         }
         const y = [...mt].reverse().find((R) => Vp(R, s, 4));
         if (p === "layer" && mt.length)
@@ -18947,8 +19229,19 @@ function cg() {
     $a = (i) => {
       var y;
       if (!Wt.current) return;
-      let s = en(i),
+      let s = en(
+          i,
+          ["move", "resize", "rotate", "marquee"].includes(Wt.current.type),
+        ),
         h = Wt.current;
+      Ct.current &&
+        Date.now() - cursorAt.current > 60 &&
+        ((cursorAt.current = Date.now()),
+        Ct.current.broadcast("cursor", {
+          x: s.x,
+          y: s.y,
+          name: (Mt == null ? void 0 : Mt.name) || "",
+        }));
       if (h.type === "marquee") {
         w({
           x: Math.min(h.start.x, s.x),
@@ -19040,6 +19333,9 @@ function cg() {
           y: Math.min(h.start.y, s.y),
           w: Math.abs(s.x - h.start.x),
           h: Math.abs(s.y - h.start.y),
+          ...(h.el.shape === "line"
+            ? { points: [h.start, { x: s.x, y: s.y }] }
+            : {}),
         };
       else {
         let R = h.el.points.at(-1);
@@ -19130,6 +19426,42 @@ function cg() {
       }),
         Ra());
     },
+    removeSelection = () => {
+      if (Tt) {
+        (De((i) => (i.clips = i.clips.filter((s) => s.id !== Tt))), ta(null));
+        return !0;
+      }
+      const i = M && M.ids.length ? M.ids : Va ? [Va] : [];
+      if (!i.length || !ze || Ue.locked) return !1;
+      return (
+        De((s) => {
+          const h = s.content[ze.id] && s.content[ze.id][ee];
+          h && (s.content[ze.id][ee] = h.filter((y) => !i.includes(y.id)));
+        }),
+        Ra(),
+        !0
+      );
+    },
+    duplicateSelection = () => {
+      const i = M && M.ids.length ? M.ids : Va ? [Va] : [],
+        s = mt.filter((h) => i.includes(h.id));
+      if (!s.length || !ze || Ue.locked) return !1;
+      const h = s.map((y) => ({ ...wo(y, jc(s), { x: 28, y: 28 }), id: Ke() }));
+      return (
+        De((y) => {
+          var R;
+          ((R = y.content[ze.id])[ee] ?? (R[ee] = []),
+            y.content[ze.id][ee].push(...h));
+        }),
+        he("transform"),
+        ia(h[0].id),
+        !0
+      );
+    },
+    selectTool = (i) => {
+      (i !== "transform" && M && $e && Gi(),
+        i === "transform" ? Bu() : he(i));
+    },
     Kn = () => {
       if (!M) return;
       const i = mt
@@ -19216,6 +19548,78 @@ function cg() {
         let y = h.layers.find((R) => R.id === ee);
         y && (y[i] = s);
       }),
+    moveLayer = (i) => {
+      const s = z.layers.findIndex((h) => h.id === ee),
+        h = s + i;
+      s < 0 ||
+        h < 0 ||
+        h >= z.layers.length ||
+        De((y) => {
+          const R = y.layers[s];
+          (y.layers.splice(s, 1), y.layers.splice(h, 0, R));
+        });
+    },
+    mergeLayer = (i) => {
+      const s = z.layers.findIndex((h) => h.id === ee);
+      if (s < 0) return;
+      const h = i === "down" ? s - 1 : s + 1;
+      if (h < 0 || h >= z.layers.length) return;
+      const y = Math.min(s, h),
+        R = Math.max(s, h),
+        U = z.layers[y],
+        X = z.layers[R];
+      (De((f) => {
+        for (const g of f.frames) {
+          const b = f.content[g.id] || (f.content[g.id] = {}),
+            N = b[U.id] || [],
+            M = b[X.id] || [],
+            B =
+              (U.blend || "normal") === "normal" &&
+              (X.blend || "normal") === "normal" &&
+              (U.opacity ?? 1) === 1 &&
+              (X.opacity ?? 1) === 1;
+          if (B) b[U.id] = [...N, ...M];
+          else {
+            const q = document.createElement("canvas");
+            ((q.width = f.width), (q.height = f.height));
+            const w = q.getContext("2d");
+            for (const [p, j] of [
+              [U, N],
+              [X, M],
+            ]) {
+              (w.save(),
+                (w.globalAlpha = p.opacity ?? 1),
+                (w.globalCompositeOperation = x1[p.blend] || "source-over"),
+                j.forEach((Z) => Eu(w, Z)),
+                w.restore());
+            }
+            b[U.id] = [
+              {
+                id: Ke(),
+                type: "image",
+                src: q.toDataURL("image/png"),
+                x: 0,
+                y: 0,
+                w: f.width,
+                h: f.height,
+                opacity: 1,
+              },
+            ];
+          }
+          delete b[X.id];
+        }
+        ((f.layers[y] = { ...U, opacity: 1, blend: "normal" }),
+          f.layers.splice(R, 1));
+      }),
+        Ee(U.id),
+        He(
+          Me === "en"
+            ? "Layers merged"
+            : Me === "es"
+              ? "Capas combinadas"
+              : "Camadas mescladas",
+        ));
+    },
     Fc = async (i) => {
       if (!i) return;
       let s = await new Promise((y) => {
@@ -19365,7 +19769,7 @@ function cg() {
       try {
         Wc(
           `${z.name || "framia"}.framia`,
-          JSON.stringify(await Bv(z)),
+          await framiaPackProject(await Bv(z)),
           "application/x-framia",
         );
       } catch (i) {
@@ -19466,12 +19870,14 @@ function cg() {
       var s, h, y, R;
       if (i)
         try {
-          let U = JSON.parse(await i.text()),
+          const V2 = await framiaUnpackProject(i);
+          let U = V2 || JSON.parse(await i.text()),
             X =
-              /\.duo$/i.test(i.name) ||
-              (!U.content &&
-                Array.isArray(U.layers) &&
-                Number.isInteger(U.total)),
+              !V2 &&
+              (/\.duo$/i.test(i.name) ||
+                (!U.content &&
+                  Array.isArray(U.layers) &&
+                  Number.isInteger(U.total))),
             $ = X ? Ip(U, i.name) : await jv(U);
           if (
             !((s = $.frames) != null && s.length) ||
@@ -19602,12 +20008,43 @@ function cg() {
               Pl(bt.current.clips.filter((se) => se.mediaId === X.mediaId)),
             U.event === "chat" && typeof X.text == "string")
           ) {
+            if (X.senderId && Mt && X.senderId === Mt.sub) return;
             const se = {
-              id: Ke(),
+              id: typeof X.id === "string" ? X.id : Ke(),
               name: String(X.name || "Colaborador").slice(0, 50),
               text: X.text.slice(0, 500),
             };
-            (Mu((be) => [...be, se]), He(se.name, se.text, () => Tu(!0)));
+            (Mu((be) => (be.some((et) => et.id === se.id) ? be : [...be, se])),
+              He(se.name, se.text, () => Tu(!0)));
+          }
+          if (
+            U.event === "cursor" &&
+            Number.isFinite(X.x) &&
+            Number.isFinite(X.y)
+          ) {
+            const se = Date.now();
+            (setRc((be) => ({
+              ...be,
+              [U.userId]: {
+                x: Rt(Number(X.x), -5e3, 5e3),
+                y: Rt(Number(X.y), -5e3, 5e3),
+                name: String(X.name || "").slice(0, 40),
+                at: se,
+              },
+            })),
+              setTimeout(
+                () =>
+                  setRc((be) =>
+                    be[U.userId] == null || be[U.userId].at !== se
+                      ? be
+                      : Object.fromEntries(
+                          Object.entries(be).filter(
+                            ([et]) => et !== U.userId,
+                          ),
+                        ),
+                  ),
+                4500,
+              ));
           }
           if (U.event === "reaction" && typeof X.emoji == "string") {
             const se = {
@@ -19643,7 +20080,30 @@ function cg() {
           U.event === "transform" && ne(U.connectionId || U.userId, X || null);
         },
       });
-      ((Ct.current = y), y.refresh(!0), Ve(""), He("Sala conectada", i));
+      ((Ct.current = y),
+        y.refresh(!0),
+        Mt &&
+          y.presence({
+            name: Mt.name || Mt.email || "Colaborador",
+            userId: Mt.sub,
+          }),
+        Ve(""),
+        He("Sala conectada", i));
+    },
+    createRoomFromHome = async () => {
+      if (!Mt) {
+        location.href =
+          "/auth/freebuff/signin?returnTo=" + encodeURIComponent("/");
+        return;
+      }
+      (ki(
+        Sm(
+          Rt(+ra.width || 1920, 64, 8192),
+          Rt(+ra.height || 1080, 64, 8192),
+          Fl.trim() || "Meu projeto",
+        ),
+      ),
+        await ko());
     },
     ko = async () => {
       if (!Mt) {
@@ -19727,13 +20187,24 @@ function cg() {
     ar = () => {
       var s, h;
       if (!Ql.trim()) return;
-      let i = { id: Ke(), name: "Você", text: Ql.trim(), time: Date.now() };
+      let i = {
+        id: Ke(),
+        name: Me === "en" ? "You" : Me === "es" ? "Tú" : "Você",
+        senderId: (Mt == null ? void 0 : Mt.sub) || Vn.current,
+        text: Ql.trim(),
+        time: Date.now(),
+      };
       (Mu((y) => [...y, i]),
         (s = Il.current) == null ||
           s.postMessage({ sender: Vn.current, type: "chat", payload: i }),
         (h = Ct.current) == null ||
           h.broadcast("chat", {
-            name: (Mt == null ? void 0 : Mt.name) || "Colaborador",
+            id: i.id,
+            senderId: i.senderId,
+            name:
+              (Mt == null ? void 0 : Mt.name) ||
+              (Mt == null ? void 0 : Mt.email) ||
+              "Colaborador",
             text: i.text,
           }),
         Lc(""));
@@ -19809,15 +20280,11 @@ function cg() {
         (y.preventDefault(), Jn());
         return;
       }
-      (y.key === "Delete" &&
-        M &&
-        ze &&
-        !Ue.locked &&
-        (De(($) => {
-          let se = $.content[ze.id][ee];
-          $.content[ze.id][ee] = se.filter((be) => !M.ids.includes(be.id));
-        }),
-        Ra()),
+      ((y.key === "Delete" || y.key === "Backspace") &&
+        (removeSelection(), y.preventDefault()),
+        (y.ctrlKey || y.metaKey) &&
+          y.key.toLowerCase() === "d" &&
+          (y.preventDefault(), duplicateSelection()),
         !(y.ctrlKey || y.metaKey || y.altKey) &&
           (y.key.toLowerCase() === "p" && Ve("brushes"),
           (y.key === "[" || y.key === "]") &&
@@ -19826,22 +20293,23 @@ function cg() {
               Rt(
                 Math.round($ * (y.key === "]" ? 1.15 : 1 / 1.15)) || 1,
                 1,
-                300,
+                1000,
               ),
             )),
           y.key === "Home" && (y.preventDefault(), F(0)),
           y.key === "End" &&
             (y.preventDefault(), F(Math.max(0, (Hn(z.frames) - 1) / z.fps))),
-          y.key.toLowerCase() === "b" && he("brush"),
-          y.key.toLowerCase() === "e" && he("eraser"),
-          (y.key.toLowerCase() === "v" || y.key.toLowerCase() === "t") && Bu(),
-          y.key.toLowerCase() === "s" && he("smudge"),
-          y.key.toLowerCase() === "g" && he("fill"),
-          y.key.toLowerCase() === "h" && he("pan"),
-          y.key.toLowerCase() === "i" && he("pipette"),
-          y.key.toLowerCase() === "l" && he("line"),
-          y.key.toLowerCase() === "r" && he("rect"),
-          y.key.toLowerCase() === "o" && he("ellipse"),
+          y.key.toLowerCase() === "b" && selectTool("brush"),
+          y.key.toLowerCase() === "e" && selectTool("eraser"),
+          (y.key.toLowerCase() === "v" || y.key.toLowerCase() === "t") &&
+            selectTool("transform"),
+          y.key.toLowerCase() === "s" && selectTool("smudge"),
+          y.key.toLowerCase() === "g" && selectTool("fill"),
+          y.key.toLowerCase() === "h" && selectTool("pan"),
+          y.key.toLowerCase() === "i" && selectTool("pipette"),
+          y.key.toLowerCase() === "l" && selectTool("line"),
+          y.key.toLowerCase() === "r" && selectTool("rect"),
+          y.key.toLowerCase() === "o" && selectTool("ellipse"),
           y.key === "ArrowRight" &&
             F(($) => Math.min(Hn(z.frames) / z.fps, $ + 1 / z.fps)),
           y.key === "ArrowLeft" && F(($) => Math.max(0, $ - 1 / z.fps))));
@@ -20048,6 +20516,208 @@ function cg() {
       }
       ke(i);
     };
+  Y.useEffect(() => {
+    const canvas = sa.current;
+    const ruler = Wl.current;
+    const tracks = Ru.current;
+    const canvasWheel = (event) => {
+      event.preventDefault();
+      Gu(xe * (event.deltaY < 0 ? 1.1 : 1 / 1.1), event.clientX, event.clientY);
+    };
+    canvas?.addEventListener("wheel", canvasWheel, { passive: false });
+    ruler?.addEventListener("wheel", Ji, { passive: false });
+    tracks?.addEventListener("wheel", Ji, { passive: false });
+    return () => {
+      canvas?.removeEventListener("wheel", canvasWheel);
+      ruler?.removeEventListener("wheel", Ji);
+      tracks?.removeEventListener("wheel", Ji);
+    };
+  });
+  const accountLabels =
+      Me === "en"
+        ? {
+            signIn: "Sign in with Freebuff",
+            signOut: "Sign out",
+            add: "Add account",
+            current: "Current account",
+            switch: "Switch",
+            remove: "Remove from this device",
+            limit: "Up to 3 saved accounts",
+            note: "Local projects and brushes are stored separately for each account.",
+          }
+        : Me === "es"
+          ? {
+              signIn: "Entrar con Freebuff",
+              signOut: "Salir",
+              add: "Añadir cuenta",
+              current: "Cuenta actual",
+              switch: "Cambiar",
+              remove: "Quitar de este dispositivo",
+              limit: "Hasta 3 cuentas guardadas",
+              note: "Los proyectos y pinceles locales se guardan por separado para cada cuenta.",
+            }
+          : {
+              signIn: "Entrar com Freebuff",
+              signOut: "Sair",
+              add: "Adicionar conta",
+              current: "Conta atual",
+              switch: "Alternar",
+              remove: "Remover deste dispositivo",
+              limit: "Até 3 contas salvas",
+              note: "Projetos e pincéis locais ficam separados por conta.",
+            },
+    accountAvatar = (i, s = 24) =>
+      i && i.picture
+        ? r.createElement("img", {
+            className: "account-avatar",
+            src: i.picture,
+            alt: "",
+            width: s,
+            height: s,
+          })
+        : r.createElement(
+            "span",
+            {
+              className: "account-avatar account-initials",
+              style: { width: s, height: s, fontSize: Math.round(s * 0.45) },
+            },
+            ((i && (i.name || i.email)) || "F").trim().slice(0, 1).toUpperCase(),
+          ),
+    renderAccountControl = (showName = !1) => {
+      if (!Di || !authAvailable) return null;
+      const i = location.pathname + location.search,
+        s = `/auth/freebuff/signin?returnTo=${encodeURIComponent(i)}`,
+        h = `${s}&prompt=select_account`,
+        y = Mt ? { id: Mt.sub, name: Mt.name || "", email: Mt.email || "", picture: Mt.picture || "" } : null,
+        $ = y && !accounts.some((V) => V.id === y.id)
+          ? [y, ...accounts].slice(0, FRAMIA_MAX_ACCOUNTS)
+          : accounts,
+        se = y ? y.id : null;
+      return y
+        ? r.createElement(
+            "div",
+            { className: `account-control ${accountMenu ? "open" : ""}` },
+            r.createElement(
+              "button",
+              {
+                type: "button",
+                className: "account-button account-trigger",
+                onClick: () => setAccountMenu((V) => !V),
+                "aria-expanded": accountMenu,
+                "aria-haspopup": "menu",
+                title: y.name || y.email || "Freebuff",
+              },
+              accountAvatar(y, 24),
+              showName &&
+                r.createElement(
+                  "span",
+                  { className: "account-name" },
+                  y.name || y.email || "Freebuff",
+                ),
+              r.createElement(
+                "span",
+                { className: "account-caret", "aria-hidden": "true" },
+                "\u25BE",
+              ),
+            ),
+            accountMenu &&
+              r.createElement(
+                "div",
+                { className: "account-menu", role: "menu" },
+                r.createElement(
+                  "div",
+                  { className: "account-menu-head" },
+                  r.createElement("span", null, "Freebuff"),
+                  r.createElement("small", null, accountLabels.limit),
+                ),
+                $.map((V) => {
+                  const oe = V.id === se;
+                  return r.createElement(
+                    "div",
+                    {
+                      key: V.id,
+                      className: `account-row ${oe ? "current" : ""}`,
+                    },
+                    accountAvatar(V, 28),
+                    r.createElement(
+                      "span",
+                      { className: "account-row-text" },
+                      r.createElement(
+                        "b",
+                        null,
+                        V.name || V.email || "Freebuff",
+                      ),
+                      r.createElement(
+                        "small",
+                        null,
+                        oe ? accountLabels.current : V.email || "",
+                      ),
+                    ),
+                    !oe &&
+                      r.createElement(
+                        "button",
+                        {
+                          type: "button",
+                          className: "account-remove",
+                          title: accountLabels.remove,
+                          "aria-label": accountLabels.remove,
+                          onClick: (ne) => {
+                            (ne.stopPropagation(),
+                              setAccounts(framiaForgetAccount(V.id)));
+                          },
+                        },
+                        "\u00D7",
+                      ),
+                    !oe &&
+                      r.createElement(
+                        "a",
+                        {
+                          className: "account-switch",
+                          href: h,
+                          onClick: () => setAccountMenu(!1),
+                        },
+                        accountLabels.switch,
+                      ),
+                  );
+                }),
+                r.createElement(
+                  "div",
+                  { className: "account-menu-actions" },
+                  $.length < FRAMIA_MAX_ACCOUNTS
+                    ? r.createElement(
+                        "a",
+                        {
+                          className: "account-add",
+                          href: h,
+                          onClick: () => setAccountMenu(!1),
+                        },
+                        "+ ",
+                        accountLabels.add,
+                      )
+                    : r.createElement(
+                        "span",
+                        { className: "account-limit" },
+                        accountLabels.limit,
+                      ),
+                  r.createElement(
+                    "form",
+                    { action: "/auth/freebuff/signout", method: "POST" },
+                    r.createElement(
+                      "button",
+                      { type: "submit", className: "account-signout" },
+                      accountLabels.signOut,
+                    ),
+                  ),
+                ),
+                r.createElement("p", { className: "account-note" }, accountLabels.note),
+              ),
+          )
+        : r.createElement(
+            "a",
+            { className: "account-button", href: s },
+            accountLabels.signIn,
+          );
+    };
   return Oa === "home"
     ? r.createElement(
         "div",
@@ -20084,6 +20754,7 @@ function cg() {
               r.createElement(im, { size: 14 }),
               xt.autosave,
             ),
+            renderAccountControl(!0),
             r.createElement(
               "select",
               {
@@ -20227,15 +20898,25 @@ function cg() {
                 "Compartilhe um código para desenhar e editar juntos.",
               ),
             ),
+            r.createElement(
+              "button",
+              { className: "home-room-create", onClick: createRoomFromHome },
+              r.createElement(mm, { size: 14 }),
+              Me === "en"
+                ? "Create room"
+                : Me === "es"
+                  ? "Crear sala"
+                  : "Criar sala",
+            ),
             r.createElement("input", {
-              maxLength: 6,
+              maxLength: 8,
               value: zl,
               placeholder: "Código da sala",
               onChange: (i) => Ln(i.target.value.toUpperCase()),
             }),
             r.createElement(
               "button",
-              { disabled: zl.trim().length !== 6, onClick: tr },
+              { disabled: ![6, 8].includes(zl.trim().length), onClick: tr },
               "Entrar",
             ),
           ),
@@ -20511,6 +21192,7 @@ function cg() {
                   ? xt.failed
                   : xt.autosave,
             ),
+            renderAccountControl(),
             r.createElement(
               "button",
               { className: "icon-button", title: "Undo Ctrl+Z", onClick: Uu },
@@ -20556,7 +21238,7 @@ function cg() {
                     key: s,
                     className: `tool ${pe === s ? "active" : ""}`,
                     title: `${h} (${y})`,
-                    onClick: () => (s === "transform" ? Bu() : he(s)),
+                    onClick: () => selectTool(s),
                   },
                   r.createElement(i, { size: 18, strokeWidth: 1.8 }),
                   r.createElement("kbd", null, y),
@@ -20648,6 +21330,20 @@ function cg() {
                 r.createElement(
                   "button",
                   {
+                    className: `mini-icon ${z.grid ? "on" : ""}`,
+                    title:
+                      Me === "en"
+                        ? "Toggle grid"
+                        : Me === "es"
+                          ? "Mostrar cuadrícula"
+                          : "Mostrar grade",
+                    onClick: () => De((i) => (i.grid = !i.grid)),
+                  },
+                  r.createElement(v1, { size: 15 }),
+                ),
+                r.createElement(
+                  "button",
+                  {
                     className: "mini-icon",
                     onClick: () =>
                       Gu(
@@ -20660,7 +21356,7 @@ function cg() {
                   },
                   r.createElement(T1, { size: 16 }),
                 ),
-                r.createElement("span", { className: "zoom-value" }, xe, "%"),
+                r.createElement("span", { className: "zoom-value" }, Math.round(xe), "%"),
                 r.createElement(
                   "button",
                   {
@@ -20702,14 +21398,6 @@ function cg() {
               {
                 className: "canvas-viewport",
                 ref: sa,
-                onWheel: (i) => {
-                  (i.preventDefault(),
-                    Gu(
-                      xe * (i.deltaY < 0 ? 1.1 : 1 / 1.1),
-                      i.clientX,
-                      i.clientY,
-                    ));
-                },
               },
               r.createElement("div", { className: "canvas-grid" }),
               r.createElement(
@@ -20722,6 +21410,13 @@ function cg() {
                     transform: `translate(${b.x}px, ${b.y}px)`,
                   },
                 },
+                z.grid &&
+                  r.createElement("div", {
+                    className: "canvas-guides",
+                    style: {
+                      backgroundSize: `${100 / Rt(Math.round(z.gridSize || 12), 2, 64)}% ${100 / Rt(Math.round(z.gridSize || 12), 2, 64)}%`,
+                    },
+                  }),
                 r.createElement("canvas", {
                   ref: Cl,
                   className: "drawing-canvas",
@@ -20730,6 +21425,28 @@ function cg() {
                   onPointerUp: an,
                   onPointerCancel: an,
                 }),
+                nl &&
+                  Object.entries(rc).map(([i, s]) =>
+                    r.createElement(
+                      "div",
+                      {
+                        key: i,
+                        className: "remote-cursor",
+                        style: {
+                          left: `${(s.x / z.width) * 100}%`,
+                          top: `${(s.y / z.height) * 100}%`,
+                        },
+                      },
+                      r.createElement("span", {
+                        className: "remote-cursor-dot",
+                      }),
+                      r.createElement(
+                        "span",
+                        { className: "remote-cursor-name" },
+                        s.name || "Colaborador",
+                      ),
+                    ),
+                  ),
                 pe === "transform" &&
                   r.createElement(
                     "svg",
@@ -20786,7 +21503,7 @@ function cg() {
                 " px ",
                 r.createElement("span", null, "•"),
                 " ",
-                xe,
+                Math.round(xe),
                 "%",
               ),
             ),
@@ -20883,13 +21600,21 @@ function cg() {
                         "div",
                         { className: "field-label" },
                         r.createElement("span", null, H.size),
-                        r.createElement("strong", null, Ae, "px"),
+                        r.createElement("input", {
+                          className: "size-input",
+                          type: "number",
+                          min: "1",
+                          max: "1000",
+                          value: Ae,
+                          onChange: (i) =>
+                            J(Rt(Math.round(+i.target.value) || 1, 1, 1000)),
+                        }),
                       ),
                       r.createElement("input", {
                         type: "range",
                         min: "1",
-                        max: "160",
-                        value: Ae,
+                        max: "1000",
+                        value: Math.min(1000, Ae),
                         onChange: (i) => J(+i.target.value),
                       }),
                       r.createElement(
@@ -21035,8 +21760,8 @@ function cg() {
                           "p",
                           { className: "transform-hint" },
                           Me === "en"
-                            ? "Click or drag a box to select. Shift-click adds content. Enter applies; Esc cancels."
-                            : "Clique ou arraste uma caixa para selecionar. Shift adiciona. Enter aplica; Esc cancela.",
+                            ? "Click a stroke or drag a box to select. Shift-click adds content. The transform applies when you click outside it, switch tools, or press Enter. Esc cancels."
+                            : "Clique em um traço ou arraste uma caixa para selecionar. Shift adiciona. A transformação é aplicada ao clicar fora, trocar de ferramenta ou pressionar Enter. Esc cancela.",
                         ),
                         r.createElement(
                           "button",
@@ -21155,7 +21880,6 @@ function cg() {
                               { className: "wide-primary", onClick: Gi },
                               r.createElement(im, { size: 15 }),
                               H.confirm,
-                              " · Enter",
                             ),
                             r.createElement(
                               "button",
@@ -21257,6 +21981,76 @@ function cg() {
                               ),
                             ),
                           ),
+                      ),
+                      r.createElement(
+                        "div",
+                        { className: "layer-tools" },
+                        r.createElement(
+                          "button",
+                          {
+                            title:
+                              Me === "en"
+                                ? "Move layer up"
+                                : Me === "es"
+                                  ? "Subir capa"
+                                  : "Mover camada para cima",
+                            "aria-label":
+                              Me === "en"
+                                ? "Move layer up"
+                                : Me === "es"
+                                  ? "Subir capa"
+                                  : "Mover camada para cima",
+                            disabled: ee === z.layers[z.layers.length - 1].id,
+                            onClick: () => moveLayer(1),
+                          },
+                          "\u2191",
+                        ),
+                        r.createElement(
+                          "button",
+                          {
+                            title:
+                              Me === "en"
+                                ? "Move layer down"
+                                : Me === "es"
+                                  ? "Bajar capa"
+                                  : "Mover camada para baixo",
+                            "aria-label":
+                              Me === "en"
+                                ? "Move layer down"
+                                : Me === "es"
+                                  ? "Bajar capa"
+                                  : "Mover camada para baixo",
+                            disabled: ee === z.layers[0].id,
+                            onClick: () => moveLayer(-1),
+                          },
+                          "\u2193",
+                        ),
+                        r.createElement(
+                          "button",
+                          {
+                            className: "wide",
+                            disabled: ee === z.layers[0].id,
+                            onClick: () => mergeLayer("down"),
+                          },
+                          Me === "en"
+                            ? "Merge down"
+                            : Me === "es"
+                              ? "Combinar abajo"
+                              : "Mesclar abaixo",
+                        ),
+                        r.createElement(
+                          "button",
+                          {
+                            className: "wide",
+                            disabled: ee === z.layers[z.layers.length - 1].id,
+                            onClick: () => mergeLayer("up"),
+                          },
+                          Me === "en"
+                            ? "Merge up"
+                            : Me === "es"
+                              ? "Combinar arriba"
+                              : "Mesclar acima",
+                        ),
                       ),
                       r.createElement(
                         "div",
@@ -21443,7 +22237,6 @@ function cg() {
               {
                 className: "timeline-ruler",
                 ref: Wl,
-                onWheel: Ji,
                 onMouseMove: (i) => Ki(i, i.currentTarget),
                 onMouseLeave: () => Ut(null),
                 onPointerDown: nr,
@@ -21511,7 +22304,6 @@ function cg() {
               {
                 className: "tracks",
                 ref: Ru,
-                onWheel: Ji,
                 onMouseMove: (i) => Ki(i, i.currentTarget),
                 onMouseLeave: () => Ut(null),
                 onScroll: (i) => {
@@ -21804,7 +22596,7 @@ function cg() {
                       key: s,
                       className: pe === s ? "active" : "",
                       onClick: () => {
-                        (s === "transform" ? Bu() : he(s), Qe(!1));
+                        (selectTool(s), Qe(!1));
                       },
                     },
                     r.createElement(i, { size: 17 }),
@@ -22002,6 +22794,9 @@ function cg() {
                       ["[ / ]", H.size],
                       ["Espaço", "Reproduzir / pausar"],
                       ["Ctrl+Z / Ctrl+Y", "Desfazer / refazer"],
+                      ["Delete", "Excluir seleção"],
+                      ["Ctrl+D", "Duplicar seleção"],
+                      ["Ctrl+C / Ctrl+V", "Copiar / colar"],
                       ["Tab", "Modo só tela"],
                       ["Esc", "Fechar painel"],
                     ].map(([i, s]) =>
@@ -22081,8 +22876,8 @@ function cg() {
                               { className: "room-join" },
                               r.createElement("input", {
                                 value: zl,
-                                maxLength: 6,
-                                placeholder: "Código de 6 caracteres",
+                                maxLength: 8,
+                                placeholder: "Código da sala",
                                 onChange: (i) =>
                                   Ln(i.target.value.toUpperCase()),
                               }),
@@ -22090,7 +22885,7 @@ function cg() {
                                 "button",
                                 {
                                   onClick: tr,
-                                  disabled: zl.trim().length !== 6,
+                                  disabled: ![6, 8].includes(zl.trim().length),
                                 },
                                 "Entrar",
                               ),
@@ -22193,6 +22988,69 @@ function cg() {
                               De((s) => (s.fps = Rt(+i.target.value, 1, 60))),
                           }),
                         ),
+                        r.createElement(
+                          "div",
+                          { className: "switch-row" },
+                          r.createElement(
+                            "span",
+                            null,
+                            Me === "en"
+                              ? "Loop animation"
+                              : Me === "es"
+                                ? "Repetir animaci\u00f3n"
+                                : "Repetir anima\u00e7\u00e3o",
+                          ),
+                          r.createElement("input", {
+                            type: "checkbox",
+                            checked: z.loop !== !1,
+                            onChange: (i) =>
+                              De((s) => (s.loop = i.target.checked)),
+                          }),
+                        ),
+                        r.createElement(
+                          "div",
+                          { className: "switch-row" },
+                          r.createElement(
+                            "span",
+                            null,
+                            Me === "en"
+                              ? "Show grid"
+                              : Me === "es"
+                                ? "Mostrar cuadr\u00edcula"
+                                : "Mostrar grade",
+                          ),
+                          r.createElement("input", {
+                            type: "checkbox",
+                            checked: !!z.grid,
+                            onChange: (i) =>
+                              De((s) => (s.grid = i.target.checked)),
+                          }),
+                        ),
+                        z.grid &&
+                          r.createElement(
+                            "label",
+                            null,
+                            Me === "en"
+                              ? "Grid divisions"
+                              : Me === "es"
+                                ? "Divisiones de la cuadr\u00edcula"
+                                : "Divis\u00f5es da grade",
+                            r.createElement("input", {
+                              type: "number",
+                              min: "2",
+                              max: "64",
+                              value: z.gridSize || 12,
+                              onChange: (i) =>
+                                De(
+                                  (s) =>
+                                    (s.gridSize = Rt(
+                                      Math.round(+i.target.value) || 12,
+                                      2,
+                                      64,
+                                    )),
+                                ),
+                            }),
+                          ),
                         r.createElement(
                           "label",
                           null,
@@ -22555,7 +23413,7 @@ function cg() {
                                   "div",
                                   { className: "brush-fields" },
                                   [
-                                    ["size", "Tamanho", 1, 200, 1],
+                                    ["size", "Tamanho", 1, 1000, 1],
                                     ["opacity", "Opacidade", 0, 1, 0.01],
                                     ["spacing", "Espaçamento", 0.01, 1, 0.01],
                                     ["hardness", "Dureza", 0, 1, 0.01],
