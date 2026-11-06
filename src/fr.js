@@ -20208,7 +20208,7 @@ function cg() {
                 );
               })
               .catch(() => He("Falha ao enviar mídia para a sala", s.name));
-        fa.replaceState(null, "", `?room=${i.code}`);
+        window.history.replaceState(null, "", `?room=${i.code}`);
       } catch (i) {
         He("Não foi possível criar sala", i.message);
       }
@@ -20230,7 +20230,7 @@ function cg() {
         const h = await s.json();
         (ul("editor"),
           Yu(i, h.revision, h.project),
-          fa.replaceState(null, "", `?room=${i}`));
+          window.history.replaceState(null, "", `?room=${i}`));
       } catch (i) {
         He("Não foi possível entrar na sala", i.message);
       }
@@ -20262,7 +20262,7 @@ function cg() {
         kc(null),
         wa([]),
         _i("offline"),
-        fa.replaceState(null, "", location.pathname));
+        window.history.replaceState(null, "", location.pathname));
     },
     ar = () => {
       var s, h;
