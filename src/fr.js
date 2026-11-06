@@ -19784,6 +19784,11 @@ function cg() {
                                 value: profileDraft.username || "",
                                 placeholder: "seu_nome",
                                 maxLength: 20,
+                                disabled: !!(profile && profile.username),
+                                title:
+                                  profile && profile.username
+                                    ? "O nome de usuário é único e não pode ser alterado."
+                                    : "Escolha com cuidado: não poderá ser alterado depois.",
                                 onChange: (i) => {
                                   const s = i.target.value
                                     .toLowerCase()
@@ -19808,9 +19813,9 @@ function cg() {
                                       ? "Disponível."
                                       : usernameStatus === "taken"
                                         ? "Já está em uso, escolha outro."
-                                        : usernameStatus === "current"
-                                          ? "Seu @ atual."
-                                          : "Só letras minúsculas, números e _.",
+                                        : profile && profile.username
+                                          ? "Seu @ é único e não pode ser alterado."
+                                          : "Só letras minúsculas, números e _. Escolha com cuidado: não poderá alterar depois.",
                               ),
                             ),
                             r.createElement(

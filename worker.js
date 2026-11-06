@@ -234,7 +234,8 @@ async function api(request, env, signedIn) {
         let username = row.username;
         if (typeof body.username === 'string') {
           const next = body.username.trim().toLowerCase();
-          if (next && next !== row.username) {
+          if (row.username && next !== row.username) return error('Username cannot be changed', 409);
+          if (next && !row.username) {
             if (!USERNAME_RE.test(next)) return error('Invalid username', 400);
             const taken = await env.DB.prepare('SELECT 1 FROM framia_profiles WHERE username=? AND user_id<>?')
               .bind(next, user.sub).first();
