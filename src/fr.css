@@ -102,3 +102,38 @@
 .guide-line.horizontal{left:0;right:0;height:1px;margin-top:-.5px;cursor:ns-resize}
 .guide-line:hover{background:#b7abff;opacity:1}
 .guide-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted,#8b8fa3)}
+.account-profile{width:100%;padding:9px 11px;border-radius:10px;background:#242838;border:1px solid #343a4f;color:#e8e9f2;font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.account-profile:hover{background:#2c3145}
+.chat-author{cursor:pointer}
+.chat-author:hover{text-decoration:underline}
+.profile-body{display:flex;flex-direction:column;gap:12px}
+.profile-card{position:relative;border-radius:14px;overflow:hidden;min-height:86px;background:#9585ed;border:1px solid #343a4f}
+.profile-card.large{min-height:150px}
+.profile-card-inner{display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:14px;background:linear-gradient(180deg,rgba(10,10,16,.05),rgba(10,10,16,.55));height:100%;justify-content:flex-end}
+.profile-card.large .profile-card-inner{padding:16px;gap:4px}
+.profile-avatar{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.7);background:#1b1d27}
+.profile-avatar.initials{display:grid;place-items:center;font-size:22px;font-weight:700;color:#fff}
+.profile-card b{font-size:16px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+.profile-card small{font-size:11px;color:rgba(255,255,255,.82)}
+.profile-card p{margin:4px 0 0;font-size:12px;line-height:1.4;color:rgba(255,255,255,.92);white-space:pre-wrap;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.profile-field{display:flex;flex-direction:column;gap:5px;font-size:11px;color:#9297ab}
+.profile-field input,.profile-field textarea{background:#161823;border:1px solid #343a4f;border-radius:9px;color:#e8e9f2;padding:9px 10px;font:inherit;font-size:12px;resize:vertical}
+.profile-banners{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.profile-swatch{width:34px;height:22px;border-radius:7px;border:2px solid transparent;cursor:pointer;padding:0}
+.profile-swatch.selected{border-color:#e8e9f2}
+.profile-color{width:34px;height:24px;padding:0;border:1px solid #343a4f;border-radius:7px;background:#161823}
+.profile-upload{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#9297ab;background:#161823;border:1px solid #343a4f;border-radius:9px;padding:6px 9px;cursor:pointer}
+.profile-upload input{display:none}
+.profile-actions{display:flex;gap:8px;align-items:center}
+.profile-badge{font-size:11px;padding:5px 10px;border-radius:999px;background:#2c3145;color:#c7c9d6}
+.friends-section{border-top:1px solid #2a2e40;padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.friends-section h3{margin:0;font-size:12px;color:#9297ab;text-transform:uppercase;letter-spacing:.06em}
+.friend-search{display:flex;gap:6px}
+.friend-search input{flex:1;background:#161823;border:1px solid #343a4f;border-radius:9px;color:#e8e9f2;padding:8px 10px;font:inherit;font-size:12px}
+.friend-list{display:flex;flex-direction:column;gap:6px}
+.friend-caption{color:#7b8095;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+.friend-row{display:flex;align-items:center;gap:8px;background:#1b1e2b;border:1px solid #2a2e40;border-radius:10px;padding:7px 9px}
+.friend-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;display:grid;place-items:center;background:#2c3145;color:#fff;font-size:11px;font-weight:700}
+.friend-text{display:flex;flex-direction:column;flex:1;min-width:0}
+.friend-text b{font-size:12px;color:#e8e9f2;overflow:hidden;text-overflow:ellipsis}
+.friend-text small{font-size:10px;color:#7b8095}
