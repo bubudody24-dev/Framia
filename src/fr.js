@@ -17090,6 +17090,32 @@ function framiaLoadBrushes() {
     return [];
   }
 }
+const FRAMIA_TOOL_DEFAULTS = {
+  brush: { size: 8, opacity: 100, spacing: 30, rotation: 0, presetId: null },
+  eraser: { size: 24, opacity: 100, spacing: 30, rotation: 0, presetId: null },
+};
+let framiaToolSettingsCache = null;
+function framiaToolSettings() {
+  if (framiaToolSettingsCache) return framiaToolSettingsCache;
+  let o = {};
+  try {
+    o = JSON.parse(localStorage.getItem("framia-tool-settings")) || {};
+  } catch {
+    o = {};
+  }
+  return (framiaToolSettingsCache = {
+    brush: { ...FRAMIA_TOOL_DEFAULTS.brush, ...(o.brush || {}) },
+    eraser: { ...FRAMIA_TOOL_DEFAULTS.eraser, ...(o.eraser || {}) },
+  });
+}
+function framiaRememberTool(o, d) {
+  if (o !== "brush" && o !== "eraser") return;
+  const v = framiaToolSettings();
+  v[o] = { ...v[o], ...d };
+  try {
+    localStorage.setItem("framia-tool-settings", JSON.stringify(v));
+  } catch {}
+}
 async function framiaClaimLocalData(o) {
   if (!o) return !1;
   let d = null;
@@ -18389,8 +18415,8 @@ function cg() {
     [ee, Ee] = Y.useState(z.layers[0].id),
     [pe, he] = Y.useState("brush"),
     [ct, Fe] = Y.useState("#22242b"),
-    [Ae, J] = Y.useState(8),
-    [re, ye] = Y.useState(100),
+    [Ae, J] = Y.useState(() => framiaToolSettings().brush.size),
+    [re, ye] = Y.useState(() => framiaToolSettings().brush.opacity),
     [xe, ke] = Y.useState(70),
     [Yt, ga] = Y.useState(!1),
     [xa, T] = Y.useState(2),
@@ -18427,8 +18453,8 @@ function cg() {
       }
     }),
     [lt, Sl] = Y.useState(null),
-    [Yn, zu] = Y.useState(30),
-    [wi, Ro] = Y.useState(0),
+    [Yn, zu] = Y.useState(() => framiaToolSettings().brush.spacing),
+    [wi, Ro] = Y.useState(() => framiaToolSettings().brush.rotation),
     [ea, Tu] = Y.useState(!1),
     [Nu, Mu] = Y.useState([]),
     [Ql, Lc] = Y.useState(""),
@@ -18961,30 +18987,46 @@ function cg() {
                   St.frameId === be.id &&
                   St.layerId === aa.id,
               );
-            if (In || rr.length) {
+            const liveDraft = [];
+            if (jn && ze && be.id === ze.id && aa.id === ee)
+              for (const X of O1(jn, z.width, z.height, we))
+                liveDraft.push({ element: X, alpha: 1 });
+            for (const X of Object.values(Au))
+              X.element &&
+                X.frameId === be.id &&
+                X.layerId === aa.id &&
+                liveDraft.push({ element: X.element, alpha: 0.6 });
+            if (In || rr.length || liveDraft.length) {
               const St =
                 d.current || (d.current = document.createElement("canvas"));
               (St.width !== z.width && (St.width = z.width),
                 St.height !== z.height && (St.height = z.height));
               const rn = St.getContext("2d");
-              rn.clearRect(0, 0, St.width, St.height);
-              const on = be.id + ":" + aa.id;
-              let sn = o.current.get(on);
-              (sn ||
-                ((sn = Zp()),
-                o.current.set(on, sn),
-                o.current.size > 4 &&
-                  o.current.delete(o.current.keys().next().value)),
-                sn.draw(
-                  rn,
-                  ku,
-                  [...(In ? [In] : []), ...rr],
-                  z.width,
-                  z.height,
-                  Eu,
-                  R,
-                ),
-                s.drawImage(St, 0, 0));
+              if (In || rr.length) {
+                rn.clearRect(0, 0, St.width, St.height);
+                const on = be.id + ":" + aa.id;
+                let sn = o.current.get(on);
+                (sn ||
+                  ((sn = Zp()),
+                  o.current.set(on, sn),
+                  o.current.size > 4 &&
+                    o.current.delete(o.current.keys().next().value)),
+                  sn.draw(
+                    rn,
+                    ku,
+                    [...(In ? [In] : []), ...rr],
+                    z.width,
+                    z.height,
+                    Eu,
+                    R,
+                  ));
+              } else (rn.clearRect(0, 0, St.width, St.height), rn.drawImage(sl, 0, 0));
+              for (const X of liveDraft)
+                (rn.save(),
+                  (rn.globalAlpha = X.alpha),
+                  Eu(rn, X.element, R),
+                  rn.restore());
+              s.drawImage(St, 0, 0);
             } else s.drawImage(sl, 0, 0);
             (se &&
               ((s.globalCompositeOperation = "source-atop"),
@@ -19004,11 +19046,6 @@ function cg() {
           U(P + X, (ce / 100) * (1 - (X - 1) / (Q + 1)), "#54bfe9");
       }
       U(P, 1, null);
-      for (const X of Object.values(Au))
-        X.frameId === (ze == null ? void 0 : ze.id) &&
-          X.element &&
-          (s.save(), (s.globalAlpha = 0.6), Eu(s, X.element, R), s.restore());
-      if (jn) for (const X of O1(jn, z.width, z.height, we)) Eu(s, X, R);
     }, [
       z,
       P,
@@ -19458,8 +19495,51 @@ function cg() {
         !0
       );
     },
+    restoreToolSettings = (i) => {
+      if (i !== "brush" && i !== "eraser") return;
+      const s = framiaToolSettings()[i];
+      (J(s.size),
+        ye(s.opacity),
+        zu(s.spacing),
+        Ro(s.rotation),
+        Sl([...Zo, ...ll].find((h) => h.id === s.presetId) || null));
+    },
+    addGuide = (i) => {
+      De((s) => {
+        (s.guides || (s.guides = [])).push({ id: Ke(), axis: i, pos: 0.5 });
+      });
+    },
+    moveGuide = (i, s) => {
+      (i.stopPropagation(), i.preventDefault());
+      const h = i.currentTarget.parentElement.getBoundingClientRect(),
+        y = i.currentTarget,
+        R = (g) =>
+          s.axis === "x"
+            ? (g.clientX - h.left) / h.width
+            : (g.clientY - h.top) / h.height,
+        U = (g) => {
+          const p = Math.max(0, Math.min(1, R(g)));
+          y.style[s.axis === "x" ? "left" : "top"] = `${p * 100}%`;
+        },
+        X = (g) => {
+          const p = Math.max(0, Math.min(1, R(g)));
+          (window.removeEventListener("pointermove", U),
+            window.removeEventListener("pointerup", X),
+            De((b) => {
+              const N = (b.guides || []).find((M) => M.id === s.id);
+              N && (N.pos = p);
+            }));
+        };
+      (window.addEventListener("pointermove", U),
+        window.addEventListener("pointerup", X));
+    },
+    removeGuide = (i) =>
+      De((s) => {
+        s.guides = (s.guides || []).filter((h) => h.id !== i);
+      }),
     selectTool = (i) => {
       (i !== "transform" && M && $e && Gi(),
+        i !== "transform" && restoreToolSettings(i),
         i === "transform" ? Bu() : he(i));
     },
     Kn = () => {
@@ -20340,18 +20420,34 @@ function cg() {
       }
     );
   }, [z, P, ee, Va, $e, mt, Oa, Oe, gt, M, p]);
+  Y.useEffect(() => {
+    framiaRememberTool(pe, {
+      size: Ae,
+      opacity: re,
+      spacing: Yn,
+      rotation: wi,
+      presetId: (lt == null ? void 0 : lt.id) || null,
+    });
+  }, [pe, Ae, re, Yn, wi, lt]);
   const lr = (i) => {
-      (Sl(i),
-        J((i == null ? void 0 : i.size) || 8),
-        ye(Math.round(((i == null ? void 0 : i.opacity) ?? 1) * 100)),
-        zu(Math.round(((i == null ? void 0 : i.spacing) ?? 0.1) * 100)),
-        he(
+      const s =
           (i == null ? void 0 : i.type) === "erase"
             ? "eraser"
             : (i == null ? void 0 : i.type) === "smudge"
               ? "smudge"
               : "brush",
-        ),
+        h = {
+          size: (i == null ? void 0 : i.size) || 8,
+          opacity: Math.round(((i == null ? void 0 : i.opacity) ?? 1) * 100),
+          spacing: Math.round(((i == null ? void 0 : i.spacing) ?? 0.1) * 100),
+          presetId: (i == null ? void 0 : i.id) || null,
+        };
+      (framiaRememberTool(s, h),
+        Sl(i),
+        J(h.size),
+        ye(h.opacity),
+        zu(h.spacing),
+        he(s),
         Ve(""));
     },
     Qi = [
@@ -21417,6 +21513,29 @@ function cg() {
                       backgroundSize: `${100 / Rt(Math.round(z.gridSize || 12), 2, 64)}% ${100 / Rt(Math.round(z.gridSize || 12), 2, 64)}%`,
                     },
                   }),
+                (z.guides || []).length > 0 &&
+                  r.createElement(
+                    "div",
+                    { className: "guide-layer" },
+                    (z.guides || []).map((i) =>
+                      r.createElement("div", {
+                        key: i.id,
+                        className: `guide-line ${i.axis === "x" ? "vertical" : "horizontal"}`,
+                        style:
+                          i.axis === "x"
+                            ? { left: `${i.pos * 100}%` }
+                            : { top: `${i.pos * 100}%` },
+                        title:
+                          Me === "en"
+                            ? "Drag to move, double-click to remove"
+                            : Me === "es"
+                              ? "Arrastra para mover, doble clic para quitar"
+                              : "Arraste para mover, clique duplo para remover",
+                        onPointerDown: (s) => moveGuide(s, i),
+                        onDoubleClick: () => removeGuide(i.id),
+                      }),
+                    ),
+                  ),
                 r.createElement("canvas", {
                   ref: Cl,
                   className: "drawing-canvas",
@@ -23051,6 +23170,62 @@ function cg() {
                                 ),
                             }),
                           ),
+                        r.createElement(
+                          "div",
+                          { className: "guide-row" },
+                          r.createElement(
+                            "span",
+                            null,
+                            Me === "en"
+                              ? "Guides"
+                              : Me === "es"
+                                ? "Guías"
+                                : "Guias",
+                          ),
+                          r.createElement(
+                            "button",
+                            {
+                              type: "button",
+                              className: "ghost-button",
+                              onClick: () => addGuide("x"),
+                            },
+                            Me === "en"
+                              ? "+ Vertical"
+                              : Me === "es"
+                                ? "+ Vertical"
+                                : "+ Vertical",
+                          ),
+                          r.createElement(
+                            "button",
+                            {
+                              type: "button",
+                              className: "ghost-button",
+                              onClick: () => addGuide("y"),
+                            },
+                            Me === "en"
+                              ? "+ Horizontal"
+                              : Me === "es"
+                                ? "+ Horizontal"
+                                : "+ Horizontal",
+                          ),
+                          (z.guides || []).length > 0 &&
+                            r.createElement(
+                              "button",
+                              {
+                                type: "button",
+                                className: "ghost-button",
+                                onClick: () =>
+                                  De((i) => {
+                                    i.guides = [];
+                                  }),
+                              },
+                              Me === "en"
+                                ? "Clear"
+                                : Me === "es"
+                                  ? "Borrar"
+                                  : "Limpar",
+                            ),
+                        ),
                         r.createElement(
                           "label",
                           null,

@@ -39,6 +39,14 @@ Signed-out sessions keep their own unscoped store.
 ## Recent changes
 
 - Account switcher with a three-account cap and per-account local projects/brushes.
+- Eraser: brush and eraser keep separate size/opacity/spacing/rotation/preset
+  settings (stored in `framia-tool-settings`), and erasing previews live on an
+  isolated layer buffer, so pixels are removed as you drag instead of a black
+  stroke appearing until release. Erasing uses `destination-out` on the layer,
+  never white paint.
+- Guides: add vertical/horizontal guides from project settings, drag them to
+  position (saved with the project) and double-click to remove; they are DOM
+  overlays and never exported.
 - Rooms: new rooms use six-character codes (eight characters still accepted for
   legacy rooms), and the home screen can create a room with the selected canvas
   size and name. Remote cursors are broadcast during editing alongside the
@@ -72,5 +80,5 @@ Signed-out sessions keep their own unscoped store.
 - GIF and MP4 export render imported video clips. MP4 export offers music on/off using imported audio clips and the browser's available MP4 recorder.
 - The replacement Worker uses new `framia_*_v2` tables. Two cloud projects and all 13 legacy rooms were copied into them. The rooms' 14 memberships and six-character codes were preserved, and the original D1 tables and R2 snapshots remain in place.
 - Local workerd tests cover signed-out access, two-user isolation, remote rooms, reconnect, and snapshot recovery. The hosted preview has been checked with an existing signed-in session; a fresh hosted sign-in/callback/sign-out cycle and two-account hosted test remain to be verified.
-- Not implemented yet from the feature request: shared cloud workspaces with invite links, Discord-style profiles (banners, gradients, bios, avatar upload), the friendship system, custom keyboard binding remapping, geometric construction guides, and post-import video FPS/speed retiming.
+- Not implemented yet from the feature request: shared cloud workspaces with invite links, Discord-style profiles (banners, gradients, bios, avatar upload), the friendship system, custom keyboard binding remapping, and post-import video FPS/speed retiming (video clips have no properties panel yet).
 - Merging layers whose blend mode or opacity is not "normal" rasterises those two layers per frame (lossless PNG) instead of concatenating strokes, which keeps the visual result but creates an image element for that frame.
