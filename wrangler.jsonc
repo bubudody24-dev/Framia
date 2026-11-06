@@ -1,0 +1,14 @@
+{
+  "name": "framia-local",
+  "main": "./dist-worker/worker.js",
+  "compatibility_date": "2026-10-13",
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": true },
+  "vars": {
+    "FREEBUFF_CLIENT_ID": "875de617-02aa-4ce6-a767-99fa3103dfd0",
+    "FREEBUFF_ISSUER": "https://freebuff.com/oidc",
+    "APP_ORIGIN": "http://localhost:8787"
+  },
+  "d1_databases": [{ "binding": "DB", "database_name": "framia-local", "database_id": "00000000-0000-0000-0000-000000000001" }],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "framia-local-files" }],
+  "durable_objects": { "bindings": [{ "name": "REALTIME", "class_name": "FreebuffRealtime", "script_name": "freebuff-sites-realtime-local" }] }
+}
