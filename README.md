@@ -26,6 +26,6 @@ Start the realtime helper first. The local Worker has a development Freebuff cli
 ## Current limits
 
 - The recovered frontend was a compiled bundle, so its variable names are generated and it needs a gradual source refactor.
-- MP4 export now offers music on/off. Music uses imported audio clips and the browser's available MP4 recorder. Video clips are not yet rendered into GIF/MP4 exports.
+- GIF and MP4 export render imported video clips. MP4 export offers music on/off using imported audio clips and the browser's available MP4 recorder.
 - The replacement Worker uses new `framia_*_v2` tables. Existing cloud projects and rooms have not been migrated because the old Worker schema was not available. Do not deploy it over the published preview until that data path is reconciled.
 - Signed-in account isolation, remote rooms, reconnect, and full auth flow need two real Freebuff accounts and a hosted preview test before publication.

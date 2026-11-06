@@ -663,11 +663,86 @@ function Oo(o, d, v) {
   return B;
 }
 const ep = () => new Promise((o) => setTimeout(o, 0));
-async function tp(o, d, v, f, g, b, options = {}) {
-  if ((o.clips || []).some((clip) => clip.type === "video"))
-    throw Error(
-      "Esta exportação de animação ainda não inclui clipes de vídeo. Remova os vídeos de uma cópia do projeto para exportar.",
+async function loadExportVideo(clip) {
+  const blob = clip.mediaId ? await pm(clip.mediaId) : null;
+  const source = blob ? URL.createObjectURL(blob) : clip.url;
+  if (!source) throw Error(`Vídeo indisponível: ${clip.name || clip.id}`);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = source;
+  try {
+    await new Promise((resolve, reject) => {
+      video.onloadedmetadata = resolve;
+      video.onerror = () =>
+        reject(Error(`Não foi possível abrir ${clip.name || "vídeo"}`));
+      video.load();
+    });
+    await seekExportVideo(
+      video,
+      Math.min(
+        Math.max(0, clip.offset || 0),
+        Math.max(0, video.duration - 0.001),
+      ),
     );
+    return { clip, video, objectUrl: blob ? source : null };
+  } catch (error) {
+    if (blob) URL.revokeObjectURL(source);
+    throw error;
+  }
+}
+async function seekExportVideo(video, time) {
+  if (Math.abs(video.currentTime - time) < 0.001 && video.readyState >= 2)
+    return;
+  if (Math.abs(video.currentTime - time) < 0.001) {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(Error("Tempo esgotado ao carregar vídeo"));
+      }, 10000);
+      const cleanup = () => {
+        clearTimeout(timeout);
+        video.removeEventListener("loadeddata", onLoaded);
+        video.removeEventListener("error", onError);
+      };
+      const onLoaded = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(Error("Falha ao carregar vídeo"));
+      };
+      video.addEventListener("loadeddata", onLoaded, { once: true });
+      video.addEventListener("error", onError, { once: true });
+    });
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(Error("Tempo esgotado ao ler um quadro de vídeo"));
+    }, 10000);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("error", onError);
+    };
+    const onSeeked = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(Error("Falha ao ler um quadro de vídeo"));
+    };
+    video.addEventListener("seeked", onSeeked, { once: true });
+    video.addEventListener("error", onError, { once: true });
+    video.currentTime = time;
+  });
+}
+async function tp(o, d, v, f, g, b, options = {}) {
   const N = document.createElement("canvas");
   ((N.width = o.width), (N.height = o.height));
   const M = N.getContext("2d"),
@@ -680,6 +755,28 @@ async function tp(o, d, v, f, g, b, options = {}) {
       for (const le of P)
         (le.src || le.brushImage) && w.add(le.src || le.brushImage);
   await Promise.all([...w].map(b));
+  const videoClips = (o.clips || []).filter((clip) => clip.type === "video");
+  const loadedVideos = await Promise.allSettled(
+    videoClips.map(loadExportVideo),
+  );
+  const videos = loadedVideos
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => result.value);
+  const releaseVideos = () => {
+    for (const { video, objectUrl } of videos) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+  };
+  const failedVideo = loadedVideos.find(
+    (result) => result.status === "rejected",
+  );
+  if (failedVideo) {
+    releaseVideos();
+    throw failedVideo.reason;
+  }
   const p = Math.max(
       Hn(o.frames),
       Math.ceil(
@@ -694,6 +791,26 @@ async function tp(o, d, v, f, g, b, options = {}) {
       var le;
       ((M.fillStyle = o.background || "#ffffff"),
         M.fillRect(0, 0, N.width, N.height));
+      const activeVideo = videos.find(
+        ({ clip }) =>
+          te / j >= clip.start && te / j < clip.start + clip.duration,
+      );
+      if (activeVideo?.video.readyState >= 2) {
+        const video = activeVideo.video;
+        const scale = Math.min(
+          N.width / video.videoWidth,
+          N.height / video.videoHeight,
+        );
+        const width = video.videoWidth * scale;
+        const height = video.videoHeight * scale;
+        M.drawImage(
+          video,
+          (N.width - width) / 2,
+          (N.height - height) / 2,
+          width,
+          height,
+        );
+      }
       const P = o.frames[gm(o.frames, te / j, j)];
       if (P) {
         for (const K of o.layers)
@@ -712,20 +829,39 @@ async function tp(o, d, v, f, g, b, options = {}) {
       }
     };
   if (d === "gif") {
-    const te = Jv();
-    for (let P = 0; P < p; P++) {
-      Z(P);
-      const le = M.getImageData(0, 0, N.width, N.height).data,
-        K = kv(le, 256);
-      (te.writeFrame(Qv(le, K), N.width, N.height, {
-        palette: K,
-        delay:
-          (Math.round(((P + 1) * 100) / j) - Math.round((P * 100) / j)) * 10,
-        repeat: 0,
-      }),
-        await ep());
+    try {
+      const te = Jv();
+      for (let P = 0; P < p; P++) {
+        const seconds = P / j;
+        const activeVideo = videos.find(
+          ({ clip }) =>
+            seconds >= clip.start && seconds < clip.start + clip.duration,
+        );
+        if (activeVideo) {
+          const { clip, video } = activeVideo;
+          await seekExportVideo(
+            video,
+            Math.min(
+              video.duration - 0.001,
+              (clip.offset || 0) + seconds - clip.start,
+            ),
+          );
+        }
+        Z(P);
+        const le = M.getImageData(0, 0, N.width, N.height).data,
+          K = kv(le, 256);
+        (te.writeFrame(Qv(le, K), N.width, N.height, {
+          palette: K,
+          delay:
+            (Math.round(((P + 1) * 100) / j) - Math.round((P * 100) / j)) * 10,
+          repeat: 0,
+        }),
+          await ep());
+      }
+      return (te.finish(), new Blob([te.bytes()], { type: "image/gif" }));
+    } finally {
+      releaseVideos();
     }
-    return (te.finish(), new Blob([te.bytes()], { type: "image/gif" }));
   }
   const audioClips = options.includeAudio
       ? (o.clips || []).filter((clip) => clip.type === "audio")
@@ -740,92 +876,117 @@ async function tp(o, d, v, f, g, b, options = {}) {
         ? void 0
         : P.isTypeSupported(te);
     });
-  if (!mediaTypes.length)
+  if (!mediaTypes.length) {
+    releaseVideos();
     throw Error(
       "Este navegador não suporta exportação MP4. Use um navegador com gravação MP4 ou exporte GIF.",
     );
-  const W = N.captureStream(j),
-    audioContext = audioClips.length ? new AudioContext() : null,
-    audioDestination = audioContext?.createMediaStreamDestination(),
+  }
+  const W = N.captureStream(j);
+  let audioContext;
+  try {
+    audioContext = audioClips.length ? new AudioContext() : null;
+  } catch (error) {
+    W.getTracks().forEach((track) => track.stop());
+    releaseVideos();
+    throw error;
+  }
+  const audioDestination = audioContext?.createMediaStreamDestination(),
     audioSources = [],
     audioBuffers = new Map();
-  if (audioContext) {
-    for (const clip of audioClips) {
-      const mediaKey = clip.mediaId || clip.url;
-      if (!mediaKey) throw Error(`Áudio indisponível: ${clip.name || clip.id}`);
-      let buffer = audioBuffers.get(mediaKey);
-      if (!buffer) {
-        const blob = clip.mediaId
-          ? await pm(clip.mediaId)
-          : await (await fetch(clip.url)).blob();
-        if (!blob) throw Error(`Áudio indisponível: ${clip.name || clip.id}`);
-        buffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
-        audioBuffers.set(mediaKey, buffer);
+  try {
+    if (audioContext) {
+      for (const clip of audioClips) {
+        const mediaKey = clip.mediaId || clip.url;
+        if (!mediaKey)
+          throw Error(`Áudio indisponível: ${clip.name || clip.id}`);
+        let buffer = audioBuffers.get(mediaKey);
+        if (!buffer) {
+          const blob = clip.mediaId
+            ? await pm(clip.mediaId)
+            : await (await fetch(clip.url)).blob();
+          if (!blob) throw Error(`Áudio indisponível: ${clip.name || clip.id}`);
+          buffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
+          audioBuffers.set(mediaKey, buffer);
+        }
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioDestination);
+        audioSources.push({ source, clip, buffer });
       }
-      const source = audioContext.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioDestination);
-      audioSources.push({ source, clip, buffer });
     }
-  }
-  const outputStream = audioDestination
-    ? new MediaStream([
-        ...W.getVideoTracks(),
-        ...audioDestination.stream.getAudioTracks(),
-      ])
-    : W;
-  let V;
-  for (const mimeType of mediaTypes) {
+    const outputStream = audioDestination
+      ? new MediaStream([
+          ...W.getVideoTracks(),
+          ...audioDestination.stream.getAudioTracks(),
+        ])
+      : W;
+    let V;
+    for (const mimeType of mediaTypes) {
+      try {
+        V = new MediaRecorder(outputStream, { mimeType });
+        break;
+      } catch {
+        // A browser may report a type as supported but reject this stream.
+      }
+    }
+    if (!V) {
+      throw Error(
+        "Este navegador não conseguiu iniciar a gravação MP4 com estas faixas.",
+      );
+    }
+    const oe = [],
+      ne = new Promise((te, P) => {
+        ((V.ondataavailable = (le) => {
+          le.data.size && oe.push(le.data);
+        }),
+          (V.onstop = () => te(new Blob(oe, { type: "video/mp4" }))),
+          (V.onerror = (le) => P(le.error || Error("Falha ao gravar MP4"))));
+      });
+    const videoTimers = [];
     try {
-      V = new MediaRecorder(outputStream, { mimeType });
-      break;
-    } catch {
-      // A browser may report a type as supported but reject this stream.
+      (Z(0), V.start());
+      for (const { clip, video } of videos) {
+        videoTimers.push(
+          setTimeout(
+            () => {
+              video.play().catch(() => {});
+              videoTimers.push(
+                setTimeout(() => video.pause(), clip.duration * 1000),
+              );
+            },
+            Math.max(0, clip.start) * 1000,
+          ),
+        );
+      }
+      if (audioContext) {
+        await audioContext.resume();
+        const startTime = audioContext.currentTime + 0.02;
+        for (const { source, clip, buffer } of audioSources) {
+          const offset = Math.max(0, clip.offset || 0);
+          const duration = Math.min(clip.duration, buffer.duration - offset);
+          if (duration > 0)
+            source.start(startTime + Math.max(0, clip.start), offset, duration);
+        }
+      }
+      const te = performance.now();
+      for (let P = 0; P < p; P++)
+        (Z(P),
+          await new Promise((le) =>
+            setTimeout(
+              le,
+              Math.max(0, te + ((P + 1) * 1e3) / j - performance.now()),
+            ),
+          ));
+      return (V.stop(), await ne);
+    } finally {
+      (videoTimers.forEach(clearTimeout), V.state !== "inactive" && V.stop());
     }
-  }
-  if (!V) {
+  } finally {
     W.getTracks().forEach((track) => track.stop());
     audioDestination?.stream.getTracks().forEach((track) => track.stop());
     await audioContext?.close();
-    throw Error(
-      "Este navegador não conseguiu iniciar a gravação MP4 com estas faixas.",
-    );
-  }
-  const oe = [],
-    ne = new Promise((te, P) => {
-      ((V.ondataavailable = (le) => {
-        le.data.size && oe.push(le.data);
-      }),
-        (V.onstop = () => te(new Blob(oe, { type: "video/mp4" }))),
-        (V.onerror = (le) => P(le.error || Error("Falha ao gravar MP4"))));
-    });
-  try {
-    (Z(0), V.start());
-    if (audioContext) {
-      await audioContext.resume();
-      const startTime = audioContext.currentTime + 0.02;
-      for (const { source, clip, buffer } of audioSources) {
-        const offset = Math.max(0, clip.offset || 0);
-        const duration = Math.min(clip.duration, buffer.duration - offset);
-        if (duration > 0)
-          source.start(startTime + Math.max(0, clip.start), offset, duration);
-      }
-    }
-    const te = performance.now();
-    for (let P = 0; P < p; P++)
-      (Z(P),
-        await new Promise((le) =>
-          setTimeout(
-            le,
-            Math.max(0, te + ((P + 1) * 1e3) / j - performance.now()),
-          ),
-        ));
-    return (V.stop(), await ne);
-  } finally {
-    (V.state !== "inactive" && V.stop(),
-      W.getTracks().forEach((te) => te.stop()),
-      audioDestination?.stream.getTracks().forEach((te) => te.stop()),
-      await audioContext?.close());
+    releaseVideos();
   }
 }
 function ap(o) {

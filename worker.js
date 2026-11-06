@@ -30,7 +30,7 @@ async function ensureSchema(env) {
   await schema;
 }
 
-async function readJson(request, maxBytes = 5_000_000) {
+async function readJson(request, maxBytes = 15_000_000) {
   if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) throw new Error('JSON required');
   const text = await request.text();
   if (text.length > maxBytes) throw new Error('Request too large');
@@ -180,6 +180,8 @@ async function api(request, env, signedIn) {
     return error('Server error', 500);
   }
 }
+
+export { api };
 
 export default {
   fetch(request, env) {
