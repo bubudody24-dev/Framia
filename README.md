@@ -21,11 +21,11 @@ bunx wrangler dev --local -c freebuff-realtime/wrangler.jsonc --inspector-port 9
 bunx wrangler dev --local -c wrangler.jsonc --inspector-port 9229
 ```
 
-Start the realtime helper first. The local Worker has a development Freebuff client registered for `http://localhost:8787`; the cloud VM's browser preview cannot complete a login on that loopback origin. The development DB and file bucket are local and isolated from the published site. `deploy.json` bundles the Worker and public build output for Sites; it has not been deployed from this workspace.
+Start the realtime helper first. The local Worker has a development Freebuff client registered for `http://localhost:8787`; the cloud VM's browser preview cannot complete a login on that loopback origin. The development DB and file bucket are local and isolated from the published site. `deploy.json` bundles the Worker and public build output for Sites. The preview deployment is at https://site-6c03c284779643b28450b656c5d30361.freebuff.page/.
 
 ## Current limits
 
 - The recovered frontend was a compiled bundle, so its variable names are generated and it needs a gradual source refactor.
 - GIF and MP4 export render imported video clips. MP4 export offers music on/off using imported audio clips and the browser's available MP4 recorder.
-- The replacement Worker uses new `framia_*_v2` tables. Existing cloud projects and rooms have not been migrated because the old Worker schema was not available. Do not deploy it over the published preview until that data path is reconciled.
-- Signed-in account isolation, remote rooms, reconnect, and full auth flow need two real Freebuff accounts and a hosted preview test before publication.
+- The replacement Worker uses new `framia_*_v2` tables. The two cloud projects visible through the old API were copied into the new project table after deployment and verified by opening one in the editor. The original D1 tables and R2 objects remain in place. Existing room records could not be inventoried from the old API and have not been migrated to the new room table.
+- Local workerd tests cover signed-out access, two-user isolation, remote rooms, reconnect, and snapshot recovery. The hosted preview has been checked with an existing signed-in session; a fresh hosted sign-in/callback/sign-out cycle and two-account hosted test remain to be verified.

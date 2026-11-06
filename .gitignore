@@ -5,3 +5,4 @@ dist-worker/
 artifacts/
 .vite/
 *.log
+/freebuff-sites-build/
