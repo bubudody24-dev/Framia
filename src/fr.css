@@ -98,9 +98,20 @@
 .guide-layer{position:absolute;inset:0;pointer-events:none;z-index:3}
 .guide-line{position:absolute;pointer-events:auto;background:#9585ed;opacity:.85}
 .guide-line::after{content:"";position:absolute;inset:-4px}
-.guide-line.vertical{top:0;bottom:0;width:1px;margin-left:-.5px;cursor:ew-resize}
-.guide-line.horizontal{left:0;right:0;height:1px;margin-top:-.5px;cursor:ns-resize}
+.guide-line.vertical{width:1px;margin-left:-.5px;cursor:ew-resize;min-height:8px}
+.guide-line.horizontal{height:1px;margin-top:-.5px;cursor:ns-resize;min-width:8px}
 .guide-line:hover{background:#b7abff;opacity:1}
+.guide-knob{position:absolute;width:9px;height:9px;border-radius:50%;background:#9585ed;border:1px solid #fff;box-shadow:0 0 0 1px #9585ed88;pointer-events:auto;z-index:2}
+.guide-line.vertical .guide-knob{left:50%;margin-left:-4.5px;cursor:ns-resize}
+.guide-line.vertical .guide-knob.start{top:-4px}
+.guide-line.vertical .guide-knob.end{bottom:-4px}
+.guide-line.horizontal .guide-knob{top:50%;margin-top:-4.5px;cursor:ew-resize}
+.guide-line.horizontal .guide-knob.start{left:-4px}
+.guide-line.horizontal .guide-knob.end{right:-4px}
+.profile-hint{display:block;margin-top:4px;font-size:11px;color:#8b8fa3}
+.profile-hint.ok{color:#3ddc97}
+.profile-hint.taken{color:#f36083}
+.profile-hint.current{color:#8b8fa3}
 .guide-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted,#8b8fa3)}
 .account-profile{width:100%;padding:9px 11px;border-radius:10px;background:#242838;border:1px solid #343a4f;color:#e8e9f2;font:inherit;font-size:12px;text-align:left;cursor:pointer}
 .account-profile:hover{background:#2c3145}

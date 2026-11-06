@@ -217,6 +217,12 @@ async function api(request, env, signedIn) {
         }
       }
     }
+    if (path[1] === 'profile' && path[2] === 'username' && request.method === 'GET') {
+      const wanted = (url.searchParams.get('u') || '').trim().toLowerCase();
+      if (!USERNAME_RE.test(wanted)) return json({ available: false, valid: false });
+      const row = await env.DB.prepare('SELECT user_id FROM framia_profiles WHERE username=?').bind(wanted).first();
+      return json({ available: !row || row.user_id === user.sub, valid: true });
+    }
     if (path[1] === 'profile') {
       if (request.method === 'GET') {
         const row = await ensureProfile(env, user);
@@ -226,12 +232,15 @@ async function api(request, env, signedIn) {
         const row = await ensureProfile(env, user);
         const body = await readJson(request, 400_000);
         let username = row.username;
-        if (!username && typeof body.username === 'string' && body.username.trim()) {
-          username = body.username.trim().toLowerCase();
-          if (!USERNAME_RE.test(username)) return error('Invalid username', 400);
-          const taken = await env.DB.prepare('SELECT 1 FROM framia_profiles WHERE username=? AND user_id<>?')
-            .bind(username, user.sub).first();
-          if (taken) return error('Username taken', 409);
+        if (typeof body.username === 'string') {
+          const next = body.username.trim().toLowerCase();
+          if (next && next !== row.username) {
+            if (!USERNAME_RE.test(next)) return error('Invalid username', 400);
+            const taken = await env.DB.prepare('SELECT 1 FROM framia_profiles WHERE username=? AND user_id<>?')
+              .bind(next, user.sub).first();
+            if (taken) return error('Username taken', 409);
+            username = next;
+          }
         }
         const displayName = body.displayName === undefined
           ? row.display_name

@@ -673,15 +673,21 @@ function j1(o, d) {
 function Nm(o) {
   return Math.max(Math.ceil(Math.log2(o)), 1);
 }
-const Jt = (o) =>
-  Math.max(1, Math.round(Number(o == null ? void 0 : o.duration) || 1));
+const FR_MIN_FRAME = 0.02,
+  fv = (o) => (Number.isInteger(o) ? String(o) : String(Math.round(o * 100) / 100)),
+  Jt = (o) => {
+    const v = Number(o == null ? void 0 : o.duration);
+    return Number.isFinite(v) && v > 0
+      ? Math.max(FR_MIN_FRAME, Math.round(v * 1e4) / 1e4)
+      : 1;
+  };
 function Ti(o, d) {
   if (d < 0 || d >= o.length) return 0;
-  if (Number.isFinite(o[d].start)) return Math.max(0, Math.round(o[d].start));
+  if (Number.isFinite(o[d].start)) return Math.max(0, o[d].start);
   let v = 0;
   for (let f = 0; f <= d; f++) {
     const g = o[f],
-      b = Number.isFinite(g.start) ? Math.max(0, Math.round(g.start)) : v;
+      b = Number.isFinite(g.start) ? Math.max(0, g.start) : v;
     if (f === d) return b;
     v = b + Jt(g);
   }
@@ -690,7 +696,7 @@ function Ti(o, d) {
 function qc(o) {
   let d = 0;
   return o.map((v) => {
-    const f = Number.isFinite(v.start) ? Math.max(0, Math.round(v.start)) : d;
+    const f = Number.isFinite(v.start) ? Math.max(0, v.start) : d;
     return ((d = f + Jt(v)), { ...v, start: f, duration: Jt(v) });
   });
 }
@@ -698,9 +704,7 @@ function Hn(o) {
   let d = 0,
     v = 0;
   for (const f of o)
-    ((d =
-      (Number.isFinite(f.start) ? Math.max(0, Math.round(f.start)) : d) +
-      Jt(f)),
+    ((d = (Number.isFinite(f.start) ? Math.max(0, f.start) : d) + Jt(f)),
       (v = Math.max(v, d)));
   return v;
 }
@@ -708,9 +712,7 @@ function gm(o, d, v) {
   const f = Math.max(0, Math.floor(d * v + 1e-7));
   let g = 0;
   for (let b = 0; b < o.length; b++) {
-    const N = Number.isFinite(o[b].start)
-      ? Math.max(0, Math.round(o[b].start))
-      : g;
+    const N = Number.isFinite(o[b].start) ? Math.max(0, o[b].start) : g;
     if (((g = N + Jt(o[b])), f >= N && f < N + Jt(o[b]))) return b;
   }
   return -1;
@@ -720,7 +722,7 @@ function Oo(o, d, v) {
     g = f.find((w) => w.id === d);
   if (!g) return f;
   const b = f.filter((w) => w.id !== d);
-  let N = Math.max(0, Math.round(v));
+  let N = Math.max(0, Math.round(v * 1e4) / 1e4);
   const M = b.find((w) => N > w.start && N < w.start + Jt(w));
   (M && (N = M.start), (g.start = N));
   const B = [...b, g].sort(
@@ -16261,7 +16263,8 @@ function Gp(o, d, v, f) {
   const g = qc(o),
     b = g.find((N) => N.id === d);
   if (!b) return g;
-  if (((f = Math.round(f)), v === "move")) return Oo(g, d, b.start + f);
+  if (((f = Math.round(f * 1e4) / 1e4), v === "move"))
+    return Oo(g, d, b.start + f);
   if (v === "left") {
     const N = b.start + Jt(b),
       M = Math.max(
@@ -16271,12 +16274,12 @@ function Gp(o, d, v, f) {
           .map((B) => B.start + Jt(B)),
       );
     return (
-      (b.start = Math.max(M, Math.min(N - 1, b.start + f))),
+      (b.start = Math.max(M, Math.min(N - FR_MIN_FRAME, b.start + f))),
       (b.duration = N - b.start),
       g
     );
   }
-  return ((b.duration = Math.max(1, Jt(b) + f)), Oo(g, d, b.start));
+  return ((b.duration = Math.max(FR_MIN_FRAME, Jt(b) + f)), Oo(g, d, b.start));
 }
 const Y1 = [
     {
@@ -18501,6 +18504,7 @@ function cg() {
     [friends, setFriends] = Y.useState({ friend: [], incoming: [], outgoing: [] }),
     [friendQuery, setFriendQuery] = Y.useState(""),
     [friendResults, setFriendResults] = Y.useState([]),
+    [usernameStatus, setUsernameStatus] = Y.useState(""),
     [Au, Hi] = Y.useState({}),
     [rc, setRc] = Y.useState({}),
     [Vc, wa] = Y.useState([]),
@@ -19079,7 +19083,7 @@ function cg() {
               s.restore());
           }
       };
-      if (Yt && P >= 0) {
+      if (Yt && !$t && P >= 0) {
         for (let X = xa; X >= 1; X--)
           U(P - X, (ce / 100) * (1 - (X - 1) / (xa + 1)), "#f36083");
         for (let X = Q; X >= 1; X--)
@@ -19094,6 +19098,7 @@ function cg() {
       jn,
       we,
       Yt,
+      $t,
       xa,
       Q,
       ce,
@@ -19568,8 +19573,36 @@ function cg() {
         He("Perfil indisponível", s.message);
       }
     },
+    checkUsername = (i) => {
+      (clearTimeout(window.__framiaUserTimer),
+        setUsernameStatus(
+          !i
+            ? ""
+            : profile && profile.username === i
+              ? "current"
+              : i.length < 3
+                ? "short"
+                : "checking",
+        ));
+      if (!i || i.length < 3 || (profile && profile.username === i)) return;
+      window.__framiaUserTimer = setTimeout(async () => {
+        try {
+          const s = await bu(
+            `/api/profile/username?u=${encodeURIComponent(i)}`,
+            "GET",
+          );
+          setUsernameStatus(s.available ? "ok" : "taken");
+        } catch {
+          setUsernameStatus("");
+        }
+      }, 380);
+    },
     saveProfile = async () => {
       if (!profileDraft) return;
+      if (usernameStatus === "taken") {
+        He("Esse @ já está em uso");
+        return;
+      }
       try {
         const i = await bu("/api/profile", "PUT", {
           username: profileDraft.username || "",
@@ -19733,25 +19766,53 @@ function cg() {
                         ? r.createElement(
                             r.Fragment,
                             null,
-                            profileCard(profileDraft, !0),
-                            !profileDraft.username &&
+                            profileCard(
+                              {
+                                ...profileDraft,
+                                username:
+                                  profile && profile.username
+                                    ? profile.username
+                                    : "",
+                              },
+                              !0,
+                            ),
+                            r.createElement(
+                              "label",
+                              { className: "profile-field" },
+                              "Nome de usuário (único)",
+                              r.createElement("input", {
+                                value: profileDraft.username || "",
+                                placeholder: "seu_nome",
+                                maxLength: 20,
+                                onChange: (i) => {
+                                  const s = i.target.value
+                                    .toLowerCase()
+                                    .replace(/[^a-z0-9_]/g, "");
+                                  (setProfileDraft((h) => ({
+                                    ...h,
+                                    username: s,
+                                  })),
+                                    checkUsername(s));
+                                },
+                              }),
                               r.createElement(
-                                "label",
-                                { className: "profile-field" },
-                                "Nome de usuário (permanente)",
-                                r.createElement("input", {
-                                  value: profileDraft.username || "",
-                                  placeholder: "seu_nome",
-                                  maxLength: 20,
-                                  onChange: (i) =>
-                                    setProfileDraft((s) => ({
-                                      ...s,
-                                      username: i.target.value
-                                        .toLowerCase()
-                                        .replace(/[^a-z0-9_]/g, ""),
-                                    })),
-                                }),
+                                "small",
+                                {
+                                  className: `profile-hint ${usernameStatus}`,
+                                },
+                                usernameStatus === "short"
+                                  ? "Mínimo de 3 caracteres."
+                                  : usernameStatus === "checking"
+                                    ? "Verificando..."
+                                    : usernameStatus === "ok"
+                                      ? "Disponível."
+                                      : usernameStatus === "taken"
+                                        ? "Já está em uso, escolha outro."
+                                        : usernameStatus === "current"
+                                          ? "Seu @ atual."
+                                          : "Só letras minúsculas, números e _.",
                               ),
+                            ),
                             r.createElement(
                               "label",
                               { className: "profile-field" },
@@ -20057,32 +20118,77 @@ function cg() {
                   ),
     addGuide = (i) => {
       De((s) => {
-        (s.guides || (s.guides = [])).push({ id: Ke(), axis: i, pos: 0.5 });
+        (s.guides || (s.guides = [])).push({
+          id: Ke(),
+          axis: i,
+          pos: 0.5,
+          from: 0,
+          to: 1,
+        });
       });
     },
     moveGuide = (i, s) => {
       (i.stopPropagation(), i.preventDefault());
-      const h = i.currentTarget.parentElement.getBoundingClientRect(),
+      const h = (i.currentTarget.closest(".guide-layer") || i.currentTarget)
+          .getBoundingClientRect(),
         y = i.currentTarget,
         R = (g) =>
           s.axis === "x"
             ? (g.clientX - h.left) / h.width
-            : (g.clientY - h.top) / h.height,
-        U = (g) => {
-          const p = Math.max(0, Math.min(1, R(g)));
+            : (g.clientY - h.top) / h.height;
+      let p = Number.isFinite(s.pos) ? s.pos : 0.5;
+      const U = (g) => {
+          p = Math.max(0, Math.min(1, R(g)));
           y.style[s.axis === "x" ? "left" : "top"] = `${p * 100}%`;
         },
-        X = (g) => {
-          const p = Math.max(0, Math.min(1, R(g)));
+        X = () => {
           (window.removeEventListener("pointermove", U),
             window.removeEventListener("pointerup", X),
+            window.removeEventListener("pointercancel", X),
             De((b) => {
               const N = (b.guides || []).find((M) => M.id === s.id);
               N && (N.pos = p);
             }));
         };
       (window.addEventListener("pointermove", U),
-        window.addEventListener("pointerup", X));
+        window.addEventListener("pointerup", X),
+        window.addEventListener("pointercancel", X));
+    },
+    resizeGuide = (i, s, h) => {
+      (i.stopPropagation(), i.preventDefault());
+      const y = i.currentTarget.closest(".guide-line"),
+        R = (y && y.parentElement ? y.parentElement : y).getBoundingClientRect(),
+        U = (g) =>
+          s.axis === "x"
+            ? (g.clientY - R.top) / R.height
+            : (g.clientX - R.left) / R.width;
+      let X = Number.isFinite(s.from) ? s.from : 0,
+        $ = Number.isFinite(s.to) ? s.to : 1;
+      const se = (g) => {
+          const be = Math.max(-2, Math.min(3, U(g)));
+          if (h === "from") X = Math.min(be, $ - 0.02);
+          else $ = Math.max(be, X + 0.02);
+          if (y)
+            if (s.axis === "x") {
+              (y.style.top = `${X * 100}%`);
+              y.style.height = `${($ - X) * 100}%`;
+            } else {
+              (y.style.left = `${X * 100}%`);
+              y.style.width = `${($ - X) * 100}%`;
+            }
+        },
+        be = () => {
+          (window.removeEventListener("pointermove", se),
+            window.removeEventListener("pointerup", be),
+            window.removeEventListener("pointercancel", be),
+            De((et) => {
+              const dt = (et.guides || []).find((nt) => nt.id === s.id);
+              dt && ((dt.from = X), (dt.to = $));
+            }));
+        };
+      (window.addEventListener("pointermove", se),
+        window.addEventListener("pointerup", be),
+        window.addEventListener("pointercancel", be));
     },
     removeGuide = (i) =>
       De((s) => {
@@ -20355,9 +20461,9 @@ function cg() {
       }
       const i = z.frames[P],
         s = Ti(z.frames, P),
-        h = Math.round(K * z.fps) - s,
+        h = Math.round((K * z.fps - s) * 1e4) / 1e4,
         y = Jt(i);
-      if (h < 1 || h >= y) {
+      if (h < FR_MIN_FRAME || h >= y) {
         He("Estique o quadro e posicione o cursor dentro dele");
         return;
       }
@@ -20654,6 +20760,7 @@ function cg() {
           }
           if (
             U.event === "cursor" &&
+            !(Mt && U.userId === Mt.sub) &&
             Number.isFinite(X.x) &&
             Number.isFinite(X.y)
           ) {
@@ -21152,7 +21259,7 @@ function cg() {
       const h = s.getBoundingClientRect(),
         y = i.clientX - h.left,
         R = (s.scrollLeft + y) / ma,
-        U = Rt(It * (i.deltaY < 0 ? 1.15 : 1 / 1.15), 0.25, 4);
+        U = Rt(It * (i.deltaY < 0 ? 1.15 : 1 / 1.15), 0.08, 12);
       (Oi(U),
         requestAnimationFrame(() => {
           ((s.scrollLeft = R * 62 * U - y),
@@ -22044,6 +22151,8 @@ function cg() {
                   "button",
                   {
                     className: "mini-icon",
+                    title: "Reduzir zoom",
+                    "aria-label": "Reduzir zoom",
                     onClick: () =>
                       Gu(
                         xe - 10,
@@ -22060,6 +22169,8 @@ function cg() {
                   "button",
                   {
                     className: "mini-icon",
+                    title: "Aumentar zoom",
+                    "aria-label": "Aumentar zoom",
                     onClick: () =>
                       Gu(
                         xe + 10,
@@ -22110,33 +22221,56 @@ function cg() {
                   },
                 },
                 z.grid &&
+                  !$t &&
                   r.createElement("div", {
                     className: "canvas-guides",
                     style: {
                       backgroundSize: `${100 / Rt(Math.round(z.gridSize || 12), 2, 64)}% ${100 / Rt(Math.round(z.gridSize || 12), 2, 64)}%`,
                     },
                   }),
-                (z.guides || []).length > 0 &&
+                !$t &&
+                  (z.guides || []).length > 0 &&
                   r.createElement(
                     "div",
                     { className: "guide-layer" },
                     (z.guides || []).map((i) =>
-                      r.createElement("div", {
-                        key: i.id,
-                        className: `guide-line ${i.axis === "x" ? "vertical" : "horizontal"}`,
-                        style:
-                          i.axis === "x"
-                            ? { left: `${i.pos * 100}%` }
-                            : { top: `${i.pos * 100}%` },
-                        title:
-                          Me === "en"
-                            ? "Drag to move, double-click to remove"
-                            : Me === "es"
-                              ? "Arrastra para mover, doble clic para quitar"
-                              : "Arraste para mover, clique duplo para remover",
-                        onPointerDown: (s) => moveGuide(s, i),
-                        onDoubleClick: () => removeGuide(i.id),
-                      }),
+                      r.createElement(
+                        "div",
+                        {
+                          key: i.id,
+                          className: `guide-line ${i.axis === "x" ? "vertical" : "horizontal"}`,
+                          style:
+                            i.axis === "x"
+                              ? {
+                                  left: `${i.pos * 100}%`,
+                                  top: `${(i.from ?? 0) * 100}%`,
+                                  height: `${((i.to ?? 1) - (i.from ?? 0)) * 100}%`,
+                                }
+                              : {
+                                  top: `${i.pos * 100}%`,
+                                  left: `${(i.from ?? 0) * 100}%`,
+                                  width: `${((i.to ?? 1) - (i.from ?? 0)) * 100}%`,
+                                },
+                          title:
+                            Me === "en"
+                              ? "Drag to move, ends resize, double-click to remove"
+                              : Me === "es"
+                                ? "Arrastra para mover, extremos alargan, doble clic para quitar"
+                                : "Arraste para mover, pontas alongam, clique duplo remove",
+                          onPointerDown: (s) => moveGuide(s, i),
+                          onDoubleClick: () => removeGuide(i.id),
+                        },
+                        r.createElement("span", {
+                          className: "guide-knob start",
+                          onPointerDown: (s) => resizeGuide(s, i, "from"),
+                          onDoubleClick: () => {},
+                        }),
+                        r.createElement("span", {
+                          className: "guide-knob end",
+                          onPointerDown: (s) => resizeGuide(s, i, "to"),
+                          onDoubleClick: () => {},
+                        }),
+                      ),
                     ),
                   ),
                 r.createElement("canvas", {
@@ -22844,7 +22978,12 @@ function cg() {
             !ka &&
             r.createElement(
               "button",
-              { className: "reopen-panel", onClick: () => wu(!0) },
+              {
+                className: "reopen-panel",
+                title: "Abrir painel lateral",
+                "aria-label": "Abrir painel lateral",
+                onClick: () => wu(!0),
+              },
               r.createElement(Op, { size: 16 }),
             ),
         ),
@@ -22879,12 +23018,22 @@ function cg() {
               { className: "transport-left" },
               r.createElement(
                 "button",
-                { className: "icon-button", onClick: () => F(0) },
+                {
+                  className: "icon-button",
+                  title: "Voltar ao início",
+                  "aria-label": "Voltar ao início",
+                  onClick: () => F(0),
+                },
                 r.createElement(Hp, { size: 16 }),
               ),
               r.createElement(
                 "button",
-                { className: "play-button", onClick: () => Aa((i) => !i) },
+                {
+                  className: "play-button",
+                  title: $t ? "Pausar (Espaço)" : "Reproduzir (Espaço)",
+                  "aria-label": $t ? "Pausar" : "Reproduzir",
+                  onClick: () => Aa((i) => !i),
+                },
                 $t
                   ? r.createElement(Dp, { size: 17, fill: "currentColor" })
                   : r.createElement(_p, { size: 17, fill: "currentColor" }),
@@ -22893,6 +23042,8 @@ function cg() {
                 "button",
                 {
                   className: "icon-button",
+                  title: "Ir para o fim",
+                  "aria-label": "Ir para o fim",
                   onClick: () => F(Ti(z.frames, z.frames.length - 1) / z.fps),
                 },
                 r.createElement(Bp, { size: 16 }),
@@ -22986,12 +23137,20 @@ function cg() {
               { className: "timeline-zoom" },
               r.createElement(
                 "button",
-                { onClick: () => Oi((i) => Rt(i - 0.25, 0.25, 4)) },
+                {
+                  title: "Menos zoom na timeline",
+                  "aria-label": "Menos zoom na timeline",
+                  onClick: () => Oi((i) => Rt(i - 0.15, 0.08, 12)),
+                },
                 r.createElement(T1, { size: 14 }),
               ),
               r.createElement(
                 "button",
-                { onClick: () => Oi((i) => Rt(i + 0.25, 0.25, 4)) },
+                {
+                  title: "Mais zoom na timeline",
+                  "aria-label": "Mais zoom na timeline",
+                  onClick: () => Oi((i) => Rt(i + 0.15, 0.08, 12)),
+                },
                 r.createElement(z1, { size: 14 }),
               ),
             ),
@@ -23064,11 +23223,12 @@ function cg() {
                     (i.preventDefault(),
                       Yo(
                         i.dataTransfer.getData("text/plain"),
-                        Math.floor(
-                          (i.clientX -
+                        Math.round(
+                          ((i.clientX -
                             i.currentTarget.getBoundingClientRect().left) /
-                            ma,
-                        ),
+                            ma) *
+                            4,
+                        ) / 4,
                       ));
                   },
                 },
@@ -23108,11 +23268,11 @@ function cg() {
                         }),
                       ),
                     ),
-                    Jt(i) > 1 &&
+                    Jt(i) !== 1 &&
                       r.createElement(
                         "span",
                         { className: "frame-duration" },
-                        Jt(i),
+                        fv(Jt(i)),
                         "f",
                       ),
                     r.createElement("span", {
