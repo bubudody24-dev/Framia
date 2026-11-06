@@ -19677,6 +19677,384 @@ function cg() {
             ),
           )
         : null,
+    profileModalBody =
+      r.createElement(
+                    "div",
+                    { className: "modal-body profile-body" },
+                    profilePeek
+                      ? r.createElement(
+                          r.Fragment,
+                          null,
+                          profileCard(profilePeek.profile, !0),
+                          r.createElement(
+                            "div",
+                            { className: "profile-actions" },
+                            profilePeek.friend && profilePeek.friend.state === "friend"
+                              ? r.createElement(
+                                  "span",
+                                  { className: "profile-badge" },
+                                  "Amigos",
+                                )
+                              : profilePeek.friend &&
+                                  profilePeek.friend.state === "outgoing"
+                                ? r.createElement(
+                                    "span",
+                                    { className: "profile-badge" },
+                                    "Pedido enviado",
+                                  )
+                                : profilePeek.friend &&
+                                    profilePeek.friend.state === "incoming"
+                                  ? r.createElement(
+                                      "button",
+                                      {
+                                        type: "button",
+                                        className: "primary-button",
+                                        onClick: () =>
+                                          respondFriend(profilePeek.friend.id, !0),
+                                      },
+                                      "Aceitar pedido de amizade",
+                                    )
+                                  : r.createElement(
+                                      "button",
+                                      {
+                                        type: "button",
+                                        className: "primary-button",
+                                        disabled: !profilePeek.profile.username,
+                                        onClick: () =>
+                                          addFriend(profilePeek.profile.username),
+                                      },
+                                      profilePeek.profile.username
+                                        ? "Adicionar amigo"
+                                        : "Esta pessoa ainda não escolheu um @",
+                                    ),
+                          ),
+                        )
+                      : profileDraft
+                        ? r.createElement(
+                            r.Fragment,
+                            null,
+                            profileCard(profileDraft, !0),
+                            !profileDraft.username &&
+                              r.createElement(
+                                "label",
+                                { className: "profile-field" },
+                                "Nome de usuário (permanente)",
+                                r.createElement("input", {
+                                  value: profileDraft.username || "",
+                                  placeholder: "seu_nome",
+                                  maxLength: 20,
+                                  onChange: (i) =>
+                                    setProfileDraft((s) => ({
+                                      ...s,
+                                      username: i.target.value
+                                        .toLowerCase()
+                                        .replace(/[^a-z0-9_]/g, ""),
+                                    })),
+                                }),
+                              ),
+                            r.createElement(
+                              "label",
+                              { className: "profile-field" },
+                              "Nome de exibição",
+                              r.createElement("input", {
+                                value: profileDraft.displayName || "",
+                                maxLength: 40,
+                                onChange: (i) =>
+                                  setProfileDraft((s) => ({
+                                    ...s,
+                                    displayName: i.target.value,
+                                  })),
+                              }),
+                            ),
+                            r.createElement(
+                              "label",
+                              { className: "profile-field" },
+                              "Bio",
+                              r.createElement("textarea", {
+                                value: profileDraft.bio || "",
+                                maxLength: 280,
+                                rows: 3,
+                                onChange: (i) =>
+                                  setProfileDraft((s) => ({
+                                    ...s,
+                                    bio: i.target.value,
+                                  })),
+                              }),
+                            ),
+                            r.createElement(
+                              "div",
+                              { className: "profile-banners" },
+                              [
+                                "linear-gradient(135deg,#9585ed,#54bfe9)",
+                                "linear-gradient(135deg,#f36083,#ffb86b)",
+                                "linear-gradient(135deg,#54bfe9,#3ddc97)",
+                                "linear-gradient(135deg,#2b2f45,#9585ed)",
+                                "linear-gradient(135deg,#ffb86b,#f36083)",
+                                "linear-gradient(135deg,#1b1d27,#3ddc97)",
+                              ].map((i) =>
+                                r.createElement("button", {
+                                  key: i,
+                                  type: "button",
+                                  className:
+                                    profileDraft.banner === i
+                                      ? "profile-swatch selected"
+                                      : "profile-swatch",
+                                  style: { background: i },
+                                  "aria-label": "Cor do banner",
+                                  onClick: () =>
+                                    setProfileDraft((s) => ({
+                                      ...s,
+                                      banner: i,
+                                      bannerImage: "",
+                                    })),
+                                }),
+                              ),
+                              r.createElement("input", {
+                                type: "color",
+                                className: "profile-color",
+                                value: /^#[0-9a-f]{6}$/i.test(
+                                  profileDraft.banner || "",
+                                )
+                                  ? profileDraft.banner
+                                  : "#9585ed",
+                                onChange: (i) =>
+                                  setProfileDraft((s) => ({
+                                    ...s,
+                                    banner: i.target.value,
+                                    bannerImage: "",
+                                  })),
+                              }),
+                              r.createElement(
+                                "label",
+                                { className: "profile-upload" },
+                                "Banner (imagem/GIF)",
+                                r.createElement("input", {
+                                  type: "file",
+                                  accept: "image/*",
+                                  onChange: (i) =>
+                                    pickProfileImage(i, "bannerImage", 1200),
+                                }),
+                              ),
+                              r.createElement(
+                                "label",
+                                { className: "profile-upload" },
+                                "Avatar",
+                                r.createElement("input", {
+                                  type: "file",
+                                  accept: "image/*",
+                                  onChange: (i) =>
+                                    pickProfileImage(i, "avatar", 256),
+                                }),
+                              ),
+                              profileDraft.bannerImage &&
+                                r.createElement(
+                                  "button",
+                                  {
+                                    type: "button",
+                                    className: "ghost-button",
+                                    onClick: () =>
+                                      setProfileDraft((s) => ({
+                                        ...s,
+                                        bannerImage: "",
+                                      })),
+                                  },
+                                  "Remover imagem",
+                                ),
+                            ),
+                            r.createElement(
+                              "button",
+                              {
+                                type: "button",
+                                className: "primary-button",
+                                onClick: () => saveProfile(),
+                              },
+                              "Salvar perfil",
+                            ),
+                            r.createElement(
+                              "section",
+                              { className: "friends-section" },
+                              r.createElement("h3", null, "Amigos"),
+                              r.createElement(
+                                "div",
+                                { className: "friend-search" },
+                                r.createElement("input", {
+                                  value: friendQuery,
+                                  placeholder: "@nome de usuário",
+                                  maxLength: 20,
+                                  onChange: (i) =>
+                                    setFriendQuery(
+                                      i.target.value.toLowerCase(),
+                                    ),
+                                  onKeyDown: (i) =>
+                                    i.key === "Enter" && searchPeople(),
+                                }),
+                                r.createElement(
+                                  "button",
+                                  {
+                                    type: "button",
+                                    className: "ghost-button",
+                                    onClick: () => searchPeople(),
+                                  },
+                                  "Buscar",
+                                ),
+                              ),
+                              friendResults.length > 0 &&
+                                r.createElement(
+                                  "div",
+                                  { className: "friend-list" },
+                                  friendResults.map((i) =>
+                                    r.createElement(
+                                      "div",
+                                      { className: "friend-row", key: i.id },
+                                      i.avatar
+                                        ? r.createElement("img", {
+                                            className: "friend-avatar",
+                                            src: i.avatar,
+                                            alt: "",
+                                          })
+                                        : r.createElement(
+                                            "span",
+                                            { className: "friend-avatar" },
+                                            (i.displayName ||
+                                              i.username ||
+                                              "F")[0].toUpperCase(),
+                                          ),
+                                      r.createElement(
+                                        "div",
+                                        { className: "friend-text" },
+                                        r.createElement(
+                                          "b",
+                                          null,
+                                          i.displayName || i.username,
+                                        ),
+                                        r.createElement(
+                                          "small",
+                                          null,
+                                          `@${i.username}`,
+                                        ),
+                                      ),
+                                      r.createElement(
+                                        "button",
+                                        {
+                                          type: "button",
+                                          className: "ghost-button",
+                                          onClick: () => addFriend(i.username),
+                                        },
+                                        i.friend === "friend"
+                                          ? "Amigos"
+                                          : i.friend === "outgoing"
+                                            ? "Pendente"
+                                            : "Adicionar",
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              friends.incoming.length > 0 &&
+                                r.createElement(
+                                  "div",
+                                  { className: "friend-list" },
+                                  r.createElement(
+                                    "small",
+                                    { className: "friend-caption" },
+                                    "Pedidos recebidos",
+                                  ),
+                                  friends.incoming.map((i) =>
+                                    r.createElement(
+                                      "div",
+                                      {
+                                        className: "friend-row",
+                                        key: i.requestId,
+                                      },
+                                      r.createElement(
+                                        "div",
+                                        { className: "friend-text" },
+                                        r.createElement(
+                                          "b",
+                                          null,
+                                          i.profile.displayName ||
+                                            i.profile.username,
+                                        ),
+                                        r.createElement(
+                                          "small",
+                                          null,
+                                          `@${i.profile.username}`,
+                                        ),
+                                      ),
+                                      r.createElement(
+                                        "button",
+                                        {
+                                          type: "button",
+                                          className: "ghost-button",
+                                          onClick: () =>
+                                            respondFriend(i.requestId, !0),
+                                        },
+                                        "Aceitar",
+                                      ),
+                                      r.createElement(
+                                        "button",
+                                        {
+                                          type: "button",
+                                          className: "ghost-button",
+                                          onClick: () =>
+                                            respondFriend(i.requestId, !1),
+                                        },
+                                        "Recusar",
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              friends.friend.length > 0 &&
+                                r.createElement(
+                                  "div",
+                                  { className: "friend-list" },
+                                  r.createElement(
+                                    "small",
+                                    { className: "friend-caption" },
+                                    "Seus amigos",
+                                  ),
+                                  friends.friend.map((i) =>
+                                    r.createElement(
+                                      "div",
+                                      {
+                                        className: "friend-row",
+                                        key: i.requestId,
+                                      },
+                                      r.createElement(
+                                        "div",
+                                        { className: "friend-text" },
+                                        r.createElement(
+                                          "b",
+                                          null,
+                                          i.profile.displayName ||
+                                            i.profile.username,
+                                        ),
+                                        r.createElement(
+                                          "small",
+                                          null,
+                                          `@${i.profile.username}`,
+                                        ),
+                                      ),
+                                      r.createElement(
+                                        "button",
+                                        {
+                                          type: "button",
+                                          className: "ghost-button",
+                                          onClick: () =>
+                                            openProfile(i.profile.id),
+                                        },
+                                        "Perfil",
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ),
+                          )
+                        : r.createElement(
+                            "div",
+                            { className: "modal-note" },
+                            "Carregando perfil...",
+                          ),
+                  ),
     addGuide = (i) => {
       De((s) => {
         (s.guides || (s.guides = [])).push({ id: Ke(), axis: i, pos: 0.5 });
@@ -21020,6 +21398,38 @@ function cg() {
             (er(i.target.files[0]), (i.target.value = ""));
           },
         }),
+        Oe === "profile" &&
+          r.createElement(
+            "div",
+            {
+              className: "modal-backdrop",
+              onMouseDown: (i) => i.target === i.currentTarget && Ve(""),
+            },
+            r.createElement(
+              "div",
+              { className: "modal" },
+              r.createElement(
+                "div",
+                { className: "modal-head" },
+                r.createElement(
+                  "div",
+                  null,
+                  r.createElement(
+                    "span",
+                    { className: "modal-kicker" },
+                    "FRAMIA STUDIO",
+                  ),
+                  r.createElement("h2", null, "Meu perfil"),
+                ),
+                r.createElement(
+                  "button",
+                  { onClick: () => Ve("") },
+                  r.createElement(dm, { size: 20 }),
+                ),
+              ),
+              profileModalBody,
+            ),
+          ),
         r.createElement(
           "header",
           { className: "home-header" },
@@ -23099,383 +23509,7 @@ function cg() {
                 ),
               ),
               Oe === "profile"
-                ? r.createElement(
-                    "div",
-                    { className: "modal-body profile-body" },
-                    profilePeek
-                      ? r.createElement(
-                          r.Fragment,
-                          null,
-                          profileCard(profilePeek.profile, !0),
-                          r.createElement(
-                            "div",
-                            { className: "profile-actions" },
-                            profilePeek.friend && profilePeek.friend.state === "friend"
-                              ? r.createElement(
-                                  "span",
-                                  { className: "profile-badge" },
-                                  "Amigos",
-                                )
-                              : profilePeek.friend &&
-                                  profilePeek.friend.state === "outgoing"
-                                ? r.createElement(
-                                    "span",
-                                    { className: "profile-badge" },
-                                    "Pedido enviado",
-                                  )
-                                : profilePeek.friend &&
-                                    profilePeek.friend.state === "incoming"
-                                  ? r.createElement(
-                                      "button",
-                                      {
-                                        type: "button",
-                                        className: "primary-button",
-                                        onClick: () =>
-                                          respondFriend(profilePeek.friend.id, !0),
-                                      },
-                                      "Aceitar pedido de amizade",
-                                    )
-                                  : r.createElement(
-                                      "button",
-                                      {
-                                        type: "button",
-                                        className: "primary-button",
-                                        disabled: !profilePeek.profile.username,
-                                        onClick: () =>
-                                          addFriend(profilePeek.profile.username),
-                                      },
-                                      profilePeek.profile.username
-                                        ? "Adicionar amigo"
-                                        : "Esta pessoa ainda não escolheu um @",
-                                    ),
-                          ),
-                        )
-                      : profileDraft
-                        ? r.createElement(
-                            r.Fragment,
-                            null,
-                            profileCard(profileDraft, !0),
-                            !profileDraft.username &&
-                              r.createElement(
-                                "label",
-                                { className: "profile-field" },
-                                "Nome de usuário (permanente)",
-                                r.createElement("input", {
-                                  value: profileDraft.username || "",
-                                  placeholder: "seu_nome",
-                                  maxLength: 20,
-                                  onChange: (i) =>
-                                    setProfileDraft((s) => ({
-                                      ...s,
-                                      username: i.target.value
-                                        .toLowerCase()
-                                        .replace(/[^a-z0-9_]/g, ""),
-                                    })),
-                                }),
-                              ),
-                            r.createElement(
-                              "label",
-                              { className: "profile-field" },
-                              "Nome de exibição",
-                              r.createElement("input", {
-                                value: profileDraft.displayName || "",
-                                maxLength: 40,
-                                onChange: (i) =>
-                                  setProfileDraft((s) => ({
-                                    ...s,
-                                    displayName: i.target.value,
-                                  })),
-                              }),
-                            ),
-                            r.createElement(
-                              "label",
-                              { className: "profile-field" },
-                              "Bio",
-                              r.createElement("textarea", {
-                                value: profileDraft.bio || "",
-                                maxLength: 280,
-                                rows: 3,
-                                onChange: (i) =>
-                                  setProfileDraft((s) => ({
-                                    ...s,
-                                    bio: i.target.value,
-                                  })),
-                              }),
-                            ),
-                            r.createElement(
-                              "div",
-                              { className: "profile-banners" },
-                              [
-                                "linear-gradient(135deg,#9585ed,#54bfe9)",
-                                "linear-gradient(135deg,#f36083,#ffb86b)",
-                                "linear-gradient(135deg,#54bfe9,#3ddc97)",
-                                "linear-gradient(135deg,#2b2f45,#9585ed)",
-                                "linear-gradient(135deg,#ffb86b,#f36083)",
-                                "linear-gradient(135deg,#1b1d27,#3ddc97)",
-                              ].map((i) =>
-                                r.createElement("button", {
-                                  key: i,
-                                  type: "button",
-                                  className:
-                                    profileDraft.banner === i
-                                      ? "profile-swatch selected"
-                                      : "profile-swatch",
-                                  style: { background: i },
-                                  "aria-label": "Cor do banner",
-                                  onClick: () =>
-                                    setProfileDraft((s) => ({
-                                      ...s,
-                                      banner: i,
-                                      bannerImage: "",
-                                    })),
-                                }),
-                              ),
-                              r.createElement("input", {
-                                type: "color",
-                                className: "profile-color",
-                                value: /^#[0-9a-f]{6}$/i.test(
-                                  profileDraft.banner || "",
-                                )
-                                  ? profileDraft.banner
-                                  : "#9585ed",
-                                onChange: (i) =>
-                                  setProfileDraft((s) => ({
-                                    ...s,
-                                    banner: i.target.value,
-                                    bannerImage: "",
-                                  })),
-                              }),
-                              r.createElement(
-                                "label",
-                                { className: "profile-upload" },
-                                "Banner (imagem/GIF)",
-                                r.createElement("input", {
-                                  type: "file",
-                                  accept: "image/*",
-                                  onChange: (i) =>
-                                    pickProfileImage(i, "bannerImage", 1200),
-                                }),
-                              ),
-                              r.createElement(
-                                "label",
-                                { className: "profile-upload" },
-                                "Avatar",
-                                r.createElement("input", {
-                                  type: "file",
-                                  accept: "image/*",
-                                  onChange: (i) =>
-                                    pickProfileImage(i, "avatar", 256),
-                                }),
-                              ),
-                              profileDraft.bannerImage &&
-                                r.createElement(
-                                  "button",
-                                  {
-                                    type: "button",
-                                    className: "ghost-button",
-                                    onClick: () =>
-                                      setProfileDraft((s) => ({
-                                        ...s,
-                                        bannerImage: "",
-                                      })),
-                                  },
-                                  "Remover imagem",
-                                ),
-                            ),
-                            r.createElement(
-                              "button",
-                              {
-                                type: "button",
-                                className: "primary-button",
-                                onClick: () => saveProfile(),
-                              },
-                              "Salvar perfil",
-                            ),
-                            r.createElement(
-                              "section",
-                              { className: "friends-section" },
-                              r.createElement("h3", null, "Amigos"),
-                              r.createElement(
-                                "div",
-                                { className: "friend-search" },
-                                r.createElement("input", {
-                                  value: friendQuery,
-                                  placeholder: "@nome de usuário",
-                                  maxLength: 20,
-                                  onChange: (i) =>
-                                    setFriendQuery(
-                                      i.target.value.toLowerCase(),
-                                    ),
-                                  onKeyDown: (i) =>
-                                    i.key === "Enter" && searchPeople(),
-                                }),
-                                r.createElement(
-                                  "button",
-                                  {
-                                    type: "button",
-                                    className: "ghost-button",
-                                    onClick: () => searchPeople(),
-                                  },
-                                  "Buscar",
-                                ),
-                              ),
-                              friendResults.length > 0 &&
-                                r.createElement(
-                                  "div",
-                                  { className: "friend-list" },
-                                  friendResults.map((i) =>
-                                    r.createElement(
-                                      "div",
-                                      { className: "friend-row", key: i.id },
-                                      i.avatar
-                                        ? r.createElement("img", {
-                                            className: "friend-avatar",
-                                            src: i.avatar,
-                                            alt: "",
-                                          })
-                                        : r.createElement(
-                                            "span",
-                                            { className: "friend-avatar" },
-                                            (i.displayName ||
-                                              i.username ||
-                                              "F")[0].toUpperCase(),
-                                          ),
-                                      r.createElement(
-                                        "div",
-                                        { className: "friend-text" },
-                                        r.createElement(
-                                          "b",
-                                          null,
-                                          i.displayName || i.username,
-                                        ),
-                                        r.createElement(
-                                          "small",
-                                          null,
-                                          `@${i.username}`,
-                                        ),
-                                      ),
-                                      r.createElement(
-                                        "button",
-                                        {
-                                          type: "button",
-                                          className: "ghost-button",
-                                          onClick: () => addFriend(i.username),
-                                        },
-                                        i.friend === "friend"
-                                          ? "Amigos"
-                                          : i.friend === "outgoing"
-                                            ? "Pendente"
-                                            : "Adicionar",
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              friends.incoming.length > 0 &&
-                                r.createElement(
-                                  "div",
-                                  { className: "friend-list" },
-                                  r.createElement(
-                                    "small",
-                                    { className: "friend-caption" },
-                                    "Pedidos recebidos",
-                                  ),
-                                  friends.incoming.map((i) =>
-                                    r.createElement(
-                                      "div",
-                                      {
-                                        className: "friend-row",
-                                        key: i.requestId,
-                                      },
-                                      r.createElement(
-                                        "div",
-                                        { className: "friend-text" },
-                                        r.createElement(
-                                          "b",
-                                          null,
-                                          i.profile.displayName ||
-                                            i.profile.username,
-                                        ),
-                                        r.createElement(
-                                          "small",
-                                          null,
-                                          `@${i.profile.username}`,
-                                        ),
-                                      ),
-                                      r.createElement(
-                                        "button",
-                                        {
-                                          type: "button",
-                                          className: "ghost-button",
-                                          onClick: () =>
-                                            respondFriend(i.requestId, !0),
-                                        },
-                                        "Aceitar",
-                                      ),
-                                      r.createElement(
-                                        "button",
-                                        {
-                                          type: "button",
-                                          className: "ghost-button",
-                                          onClick: () =>
-                                            respondFriend(i.requestId, !1),
-                                        },
-                                        "Recusar",
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              friends.friend.length > 0 &&
-                                r.createElement(
-                                  "div",
-                                  { className: "friend-list" },
-                                  r.createElement(
-                                    "small",
-                                    { className: "friend-caption" },
-                                    "Seus amigos",
-                                  ),
-                                  friends.friend.map((i) =>
-                                    r.createElement(
-                                      "div",
-                                      {
-                                        className: "friend-row",
-                                        key: i.requestId,
-                                      },
-                                      r.createElement(
-                                        "div",
-                                        { className: "friend-text" },
-                                        r.createElement(
-                                          "b",
-                                          null,
-                                          i.profile.displayName ||
-                                            i.profile.username,
-                                        ),
-                                        r.createElement(
-                                          "small",
-                                          null,
-                                          `@${i.profile.username}`,
-                                        ),
-                                      ),
-                                      r.createElement(
-                                        "button",
-                                        {
-                                          type: "button",
-                                          className: "ghost-button",
-                                          onClick: () =>
-                                            openProfile(i.profile.id),
-                                        },
-                                        "Perfil",
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ),
-                          )
-                        : r.createElement(
-                            "div",
-                            { className: "modal-note" },
-                            "Carregando perfil...",
-                          ),
-                  )
+                ? profileModalBody
                 : Oe === "shortcuts"
                 ? r.createElement(
                     "div",
