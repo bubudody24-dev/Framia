@@ -24165,7 +24165,7 @@ function cg() {
                               "small",
                               null,
                               Vc.length,
-                              " conexões · ",
+                              Vc.length === 1 ? " conexão · " : " conexões · ",
                               Ri,
                             ),
                             r.createElement(
