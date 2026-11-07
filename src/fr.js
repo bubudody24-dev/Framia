@@ -17720,6 +17720,12 @@ class ag {
       this.revision = g.revision;
     });
   }
+  undo() {
+    return this.enqueue(async () => {
+      const d = await bu(`/api/rooms/${this.code}/undo`, "POST", {});
+      this.revision = d.revision;
+    });
+  }
   mutation(d) {
     return this.enqueue(async () => {
       for (let v = 0; v < 4; v++) {
@@ -17782,7 +17788,51 @@ class ag {
   }
 }
 const Ke = () => Math.random().toString(36).slice(2, 10),
-  Rt = (o, d, v) => Math.max(d, Math.min(v, o));
+  Rt = (o, d, v) => Math.max(d, Math.min(v, o)),
+  EMOJI_NAMES = { sob: "😭", joy: "😂", laugh: "😂", heart: "❤️", fire: "🔥", sparkles: "✨", thumbsup: "👍", thumbsdown: "👎", clap: "👏", tada: "🎉", eyes: "👀", thinking: "🤔", angry: "😠", scream: "😱", blush: "😊", wink: "😉", cry: "😢", smile: "😄", grin: "😁", rofl: "🤣", kiss: "😘", heart_eyes: "😍", cool: "😎", neutral: "😐", confused: "😕", sleepy: "😴", sick: "🤢", poop: "💩", skull: "💀", ghost: "👻", robot: "🤖", cat: "🐱", dog: "🐶", ok_hand: "👌", pray: "🙏", muscle: "💪", wave: "👋", check: "✅", x: "❌", warning: "⚠️", star: "⭐", hundred: "💯", rocket: "🚀", party: "🥳" },
+  expandEmojiNames = (o) =>
+    String(o || "").replace(/:([a-z0-9_+-]+):/gi, (d, v) => EMOJI_NAMES[v.toLowerCase()] || d),
+  copyText = async (o) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) return await navigator.clipboard.writeText(o);
+    } catch {}
+    const d = document.createElement("textarea");
+    d.value = o; d.setAttribute("readonly", ""); d.style.position = "fixed"; d.style.opacity = "0";
+    document.body.appendChild(d); d.select();
+    const v = document.execCommand("copy"); d.remove();
+    if (!v) throw Error("Não foi possível copiar");
+    return void 0;
+  },
+  SHORTCUT_STORE = "framia-shortcuts",
+  SHORTCUT_DEFAULTS = {
+    transform: "v",
+    brush: "b",
+    eraser: "e",
+    smudge: "s",
+    fill: "g",
+    pan: "h",
+    pipette: "i",
+    line: "l",
+    rect: "r",
+    ellipse: "o",
+  },
+  loadShortcuts = () => {
+    try {
+      const o = JSON.parse(localStorage.getItem(SHORTCUT_STORE) || "{}"),
+        d = { ...SHORTCUT_DEFAULTS };
+      for (const v of Object.keys(SHORTCUT_DEFAULTS))
+        typeof o[v] === "string" && /^[a-z0-9]$/.test(o[v]) && (d[v] = o[v]);
+      return d;
+    } catch {
+      return { ...SHORTCUT_DEFAULTS };
+    }
+  },
+  saveShortcuts = (o) => {
+    try {
+      localStorage.setItem(SHORTCUT_STORE, JSON.stringify(o));
+    } catch {}
+    return o;
+  };
 async function gu(o, d = "GET", v) {
   const f = await fetch(o, {
     method: d,
@@ -18482,6 +18532,10 @@ function cg() {
     [ea, Tu] = Y.useState(!1),
     [Nu, Mu] = Y.useState([]),
     [Ql, Lc] = Y.useState(""),
+    [emojiOpen, setEmojiOpen] = Y.useState(!1),
+    [fpsOpen, setFpsOpen] = Y.useState(!1),
+    [shortcuts, setShortcuts] = Y.useState(loadShortcuts),
+    [renderFps, setRenderFps] = Y.useState(0),
     [ca, Cu] = Y.useState(null),
     [_o, Za] = Y.useState([]),
     [Tt, ta] = Y.useState(null),
@@ -18685,7 +18739,17 @@ function cg() {
           ...y,
           content: {
             ...y.content,
-            [i]: { ...R, [s]: [...(R[s] || []), ...h] },
+            [i]: {
+              ...R,
+              [s]: [
+                ...(R[s] || []),
+                ...h.map((element) => ({
+                  ...element,
+                  authorId: (Mt == null ? void 0 : Mt.sub) || Vn.current,
+                  createdAt: Date.now(),
+                })),
+              ],
+            },
           },
           revision: ++Gn.current,
         };
@@ -18694,7 +18758,16 @@ function cg() {
         (Ht.current = []),
         (bt.current = U),
         te(U),
-        (X = Ct.current) == null || X.stroke(i, s, h),
+        (X = Ct.current) == null ||
+          X.stroke(
+            i,
+            s,
+            h.map((element) => ({
+              ...element,
+              authorId: (Mt == null ? void 0 : Mt.sub) || Vn.current,
+              createdAt: Date.now(),
+            })),
+          ),
         ($ = Ct.current) == null ||
           $.broadcast("stroke-end", { frameId: i, layerId: s }));
     },
@@ -18722,11 +18795,22 @@ function cg() {
     },
     Uu = () => {
       (B(null), rt(null), ia(null));
+      if (Ct.current) {
+        Ct.current.undo();
+        return;
+      }
       const i = fa.current.pop();
       i && (Ht.current.push(bt.current), _u(i));
     },
     ol = () => {
       (B(null), rt(null), ia(null));
+      if (Ct.current) {
+        He(
+          "Refazer indisponível na sala",
+          "Cada pessoa desfaz apenas as próprias ações. Refazer reaplicaria um estado antigo e sobrescreveria o desenho dos outros.",
+        );
+        return;
+      }
       const i = Ht.current.pop();
       i && (fa.current.push(bt.current), _u(i));
     },
@@ -20132,6 +20216,80 @@ function cg() {
         });
       });
     },
+    addGuideShape = (i) => {
+      De((s) => {
+        (s.guides || (s.guides = [])).push({
+          id: Ke(),
+          kind: i,
+          x: 0.2,
+          y: 0.2,
+          w: i === "circle" ? (0.5 * s.height) / s.width : 0.6,
+          h: 0.5,
+        });
+      });
+    },
+    moveGuideShape = (i, s) => {
+      (i.stopPropagation(), i.preventDefault());
+      const h = (
+          i.currentTarget.closest(".guide-layer") || i.currentTarget
+        ).getBoundingClientRect(),
+        y = i.currentTarget,
+        R = Math.max(0, Math.min(1, s.w ?? 0.5)),
+        U = Math.max(0, Math.min(1, s.h ?? 0.5));
+      let X = Number.isFinite(s.x) ? s.x : 0.2,
+        $ = Number.isFinite(s.y) ? s.y : 0.2;
+      const se = (g) => {
+          ((X = Math.max(0, Math.min(1 - R, (g.clientX - h.left) / h.width - R / 2))),
+            ($ = Math.max(0, Math.min(1 - U, (g.clientY - h.top) / h.height - U / 2))),
+            (y.style.left = `${X * 100}%`),
+            (y.style.top = `${$ * 100}%`));
+        },
+        be = () => {
+          (window.removeEventListener("pointermove", se),
+            window.removeEventListener("pointerup", be),
+            window.removeEventListener("pointercancel", be),
+            De((g) => {
+              const b = (g.guides || []).find((N) => N.id === s.id);
+              b && ((b.x = X), (b.y = $));
+            }));
+        };
+      (window.addEventListener("pointermove", se),
+        window.addEventListener("pointerup", be),
+        window.addEventListener("pointercancel", be));
+    },
+    resizeGuideShape = (i, s) => {
+      (i.stopPropagation(), i.preventDefault());
+      const h = (
+          i.currentTarget.closest(".guide-layer") || i.currentTarget
+        ).getBoundingClientRect(),
+        y = i.currentTarget.closest(".guide-shape"),
+        R0 = Number.isFinite(s.x) ? s.x : 0.2,
+        U0 = Number.isFinite(s.y) ? s.y : 0.2;
+      let R = Number.isFinite(s.w) ? s.w : 0.5,
+        U = Number.isFinite(s.h) ? s.h : 0.5;
+      const X = (g) => {
+          ((R = Math.max(0.05, Math.min(1 - R0, (g.clientX - h.left) / h.width - R0))),
+            (U = Math.max(0.05, Math.min(1 - U0, (g.clientY - h.top) / h.height - U0))));
+          s.kind === "circle" &&
+            ((U = Math.max(0.05, Math.min(1 - U0, (R * z.width) / z.height))),
+            (R = Math.max(0.05, Math.min(1 - R0, (U * z.height) / z.width))));
+          y &&
+            ((y.style.width = `${R * 100}%`),
+            (y.style.height = `${U * 100}%`));
+        },
+        $ = () => {
+          (window.removeEventListener("pointermove", X),
+            window.removeEventListener("pointerup", $),
+            window.removeEventListener("pointercancel", $),
+            De((g) => {
+              const b = (g.guides || []).find((N) => N.id === s.id);
+              b && ((b.w = R), (b.h = U));
+            }));
+        };
+      (window.addEventListener("pointermove", X),
+        window.addEventListener("pointerup", $),
+        window.addEventListener("pointercancel", $));
+    },
     moveGuide = (i, s) => {
       (i.stopPropagation(), i.preventDefault());
       const h = (i.currentTarget.closest(".guide-layer") || i.currentTarget)
@@ -20758,7 +20916,9 @@ function cg() {
             const se = {
               id: typeof X.id === "string" ? X.id : Ke(),
               name: String(X.name || "Colaborador").slice(0, 50),
-              text: X.text.slice(0, 500),
+              username: String(X.username || "").slice(0, 20),
+              avatar: typeof X.avatar === "string" ? X.avatar : "",
+              text: expandEmojiNames(X.text.slice(0, 500)),
             };
             (Mu((be) => (be.some((et) => et.id === se.id) ? be : [...be, se])),
               He(se.name, se.text, () => Tu(!0)));
@@ -20824,6 +20984,12 @@ function cg() {
                 1800,
               ));
           }
+          U.event === "stroke-end" &&
+            Hi((be) =>
+              U.userId in be
+                ? Object.fromEntries(Object.entries(be).filter((et) => et[0] !== U.userId))
+                : be,
+            );
           U.event === "transform" && ne(U.connectionId || U.userId, X || null);
         },
       });
@@ -20831,7 +20997,16 @@ function cg() {
         y.refresh(!0),
         Mt &&
           y.presence({
-            name: Mt.name || Mt.email || "Colaborador",
+            name:
+              (profile == null ? void 0 : profile.displayName) ||
+              Mt.name ||
+              Mt.email ||
+              "Colaborador",
+            username: (profile == null ? void 0 : profile.username) || "",
+            avatar:
+              (profile == null ? void 0 : profile.avatar) ||
+              (Mt == null ? void 0 : Mt.picture) ||
+              "",
             userId: Mt.sub,
           }),
         Ve(""),
@@ -20904,6 +21079,15 @@ function cg() {
     };
   Y.useEffect(() => {
     const i = new URLSearchParams(location.search).get("room");
+    Di &&
+      !Mt &&
+      i &&
+      (location.href =
+        "/auth/freebuff/signin?returnTo=" +
+        encodeURIComponent(location.pathname + location.search));
+  }, [Mt, Di]);
+  Y.useEffect(() => {
+    const i = new URLSearchParams(location.search).get("room");
     Mt &&
       i &&
       !Du.current &&
@@ -20940,9 +21124,17 @@ function cg() {
       if (!Ql.trim()) return;
       let i = {
         id: Ke(),
-        name: Me === "en" ? "You" : Me === "es" ? "Tú" : "Você",
+        name:
+          (profile == null ? void 0 : profile.displayName) ||
+          (Mt == null ? void 0 : Mt.name) ||
+          "Colaborador",
+        username: (profile == null ? void 0 : profile.username) || "",
+        avatar:
+          (profile == null ? void 0 : profile.avatar) ||
+          (Mt == null ? void 0 : Mt.picture) ||
+          "",
         senderId: (Mt == null ? void 0 : Mt.sub) || Vn.current,
-        text: Ql.trim(),
+        text: expandEmojiNames(Ql.trim()),
         time: Date.now(),
       };
       (Mu((y) => [...y, i]),
@@ -20952,10 +21144,9 @@ function cg() {
           h.broadcast("chat", {
             id: i.id,
             senderId: i.senderId,
-            name:
-              (Mt == null ? void 0 : Mt.name) ||
-              (Mt == null ? void 0 : Mt.email) ||
-              "Colaborador",
+            name: i.name,
+            username: i.username,
+            avatar: i.avatar,
             text: i.text,
           }),
         Lc(""));
@@ -21050,17 +21241,12 @@ function cg() {
           y.key === "Home" && (y.preventDefault(), F(0)),
           y.key === "End" &&
             (y.preventDefault(), F(Math.max(0, (Hn(z.frames) - 1) / z.fps))),
-          y.key.toLowerCase() === "b" && selectTool("brush"),
-          y.key.toLowerCase() === "e" && selectTool("eraser"),
-          (y.key.toLowerCase() === "v" || y.key.toLowerCase() === "t") &&
-            selectTool("transform"),
-          y.key.toLowerCase() === "s" && selectTool("smudge"),
-          y.key.toLowerCase() === "g" && selectTool("fill"),
-          y.key.toLowerCase() === "h" && selectTool("pan"),
-          y.key.toLowerCase() === "i" && selectTool("pipette"),
-          y.key.toLowerCase() === "l" && selectTool("line"),
-          y.key.toLowerCase() === "r" && selectTool("rect"),
-          y.key.toLowerCase() === "o" && selectTool("ellipse"),
+          (() => {
+            const $ = y.key.toLowerCase();
+            if ($ === "t") return selectTool("transform");
+            const se = Object.keys(shortcuts).find((be) => shortcuts[be] === $);
+            se && selectTool(se);
+          })(),
           y.key === "ArrowRight" &&
             F(($) => Math.min(Hn(z.frames) / z.fps, $ + 1 / z.fps)),
           y.key === "ArrowLeft" && F(($) => Math.max(0, $ - 1 / z.fps))));
@@ -21090,7 +21276,20 @@ function cg() {
           window.removeEventListener("paste", h));
       }
     );
-  }, [z, P, ee, Va, $e, mt, Oa, Oe, gt, M, p]);
+  }, [z, P, ee, Va, $e, mt, Oa, Oe, gt, M, p, shortcuts]);
+  Y.useEffect(() => {
+    if (!fpsOpen) return;
+    let i = 0,
+      s = performance.now(),
+      h = 0;
+    const y = (R) => {
+      (i++,
+        R - s >= 500 &&
+          (setRenderFps(Math.round((i * 1e3) / (R - s))), (i = 0), (s = R)),
+        (h = requestAnimationFrame(y)));
+    };
+    return ((h = requestAnimationFrame(y)), () => cancelAnimationFrame(h));
+  }, [fpsOpen]);
   Y.useEffect(() => {
     framiaRememberTool(pe, {
       size: Ae,
@@ -22048,11 +22247,15 @@ function cg() {
                   {
                     key: s,
                     className: `tool ${pe === s ? "active" : ""}`,
-                    title: `${h} (${y})`,
+                    title: `${h} (${(shortcuts[s] || y).toUpperCase()})`,
                     onClick: () => selectTool(s),
                   },
                   r.createElement(i, { size: 18, strokeWidth: 1.8 }),
-                  r.createElement("kbd", null, y),
+                  r.createElement(
+                    "kbd",
+                    null,
+                    (shortcuts[s] || y).toUpperCase(),
+                  ),
                 ),
               ),
             ),
@@ -22238,7 +22441,38 @@ function cg() {
                   r.createElement(
                     "div",
                     { className: "guide-layer" },
-                    (z.guides || []).map((i) =>
+                    (z.guides || [])
+                      .filter((i) => i.kind === "circle" || i.kind === "rect")
+                      .map((i) =>
+                        r.createElement(
+                          "div",
+                          {
+                            key: i.id,
+                            className: `guide-shape ${i.kind}`,
+                            style: {
+                              left: `${(i.x ?? 0.2) * 100}%`,
+                              top: `${(i.y ?? 0.2) * 100}%`,
+                              width: `${(i.w ?? 0.6) * 100}%`,
+                              height: `${(i.h ?? 0.6) * 100}%`,
+                            },
+                            title:
+                              Me === "en"
+                                ? "Drag to move, corner resizes, double-click removes"
+                                : Me === "es"
+                                  ? "Arrastra para mover, esquina redimensiona, doble clic quita"
+                                  : "Arraste para mover, canto redimensiona, clique duplo remove",
+                            onPointerDown: (s) => moveGuideShape(s, i),
+                            onDoubleClick: () => removeGuide(i.id),
+                          },
+                          r.createElement("span", {
+                            className: "guide-shape-knob",
+                            onPointerDown: (s) => resizeGuideShape(s, i),
+                          }),
+                        ),
+                      ),
+                    (z.guides || [])
+                      .filter((i) => i.kind !== "circle" && i.kind !== "rect")
+                      .map((i) =>
                       r.createElement(
                         "div",
                         {
@@ -22286,6 +22520,60 @@ function cg() {
                   onPointerUp: an,
                   onPointerCancel: an,
                 }),
+                fpsOpen &&
+                  r.createElement(
+                    "div",
+                    { className: "fps-panel" },
+                    r.createElement(
+                      "div",
+                      { className: "fps-panel-head" },
+                      r.createElement("b", null, renderFps, " FPS"),
+                      r.createElement(
+                        "button",
+                        {
+                          type: "button",
+                          className: "fps-close",
+                          "aria-label": "Fechar painel de FPS",
+                          onClick: () => setFpsOpen(!1),
+                        },
+                        "×",
+                      ),
+                    ),
+                    r.createElement(
+                      "small",
+                      null,
+                      "Renderização ao vivo · projeto ",
+                      z.fps,
+                      " FPS",
+                    ),
+                    z.clips.filter((i) => i.type === "video").length === 0
+                      ? r.createElement("small", null, "Nenhum vídeo importado.")
+                      : z.clips
+                          .filter((i) => i.type === "video")
+                          .slice(0, 4)
+                          .map((i) =>
+                            r.createElement(
+                              "small",
+                              { key: i.id, className: "fps-video-row" },
+                              r.createElement("span", null, i.name || "Vídeo"),
+                              r.createElement(
+                                "span",
+                                null,
+                                Math.round(i.duration * 100) / 100,
+                                "s de vídeo no projeto",
+                              ),
+                            ),
+                          ),
+                    r.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "ghost-button",
+                        onClick: () => Ve("settings"),
+                      },
+                      "Ajustar FPS do projeto",
+                    ),
+                  ),
                 nl &&
                   Object.entries(rc).map(([i, s]) =>
                     r.createElement(
@@ -23071,8 +23359,15 @@ function cg() {
               ),
               r.createElement("span", { className: "transport-sep" }),
               r.createElement(
-                "span",
-                { className: "fps-label" },
+                "button",
+                {
+                  type: "button",
+                  className: fpsOpen ? "fps-label open" : "fps-label",
+                  title: "Painel de FPS",
+                  "aria-label": "Painel de FPS",
+                  "aria-pressed": fpsOpen,
+                  onClick: () => setFpsOpen((i) => !i),
+                },
                 z.fps,
                 " FPS",
               ),
@@ -23488,7 +23783,11 @@ function cg() {
                     },
                     r.createElement(i, { size: 17 }),
                     r.createElement("span", null, h),
-                    r.createElement("kbd", null, y),
+                    r.createElement(
+                      "kbd",
+                      null,
+                      (shortcuts[s] || y).toUpperCase(),
+                    ),
                   ),
                 ),
                 r.createElement(
@@ -23545,17 +23844,34 @@ function cg() {
                     r.createElement(
                       "div",
                       { className: "chat-message", key: i.id },
+                      i.avatar
+                        ? r.createElement("img", {
+                            className: "chat-avatar",
+                            src: i.avatar,
+                            alt: "",
+                          })
+                        : r.createElement(
+                            "span",
+                            { className: "chat-avatar chat-avatar-fallback" },
+                            (i.name || "?").slice(0, 1).toUpperCase(),
+                          ),
                       r.createElement(
-                        "b",
-                        {
-                          className: i.senderId ? "chat-author" : "",
-                          onClick: i.senderId
-                            ? () => openProfile(i.senderId)
-                            : void 0,
-                        },
-                        i.name,
+                        "div",
+                        { className: "chat-message-body" },
+                        r.createElement(
+                          "b",
+                          {
+                            className: i.senderId ? "chat-author" : "",
+                            onClick: i.senderId
+                              ? () => openProfile(i.senderId)
+                              : void 0,
+                          },
+                          i.name,
+                          i.username &&
+                            r.createElement("small", null, " @", i.username),
+                        ),
+                        r.createElement("p", null, i.text),
                       ),
-                      r.createElement("p", null, i.text),
                     ),
                   ),
             ),
@@ -23570,17 +23886,61 @@ function cg() {
               "div",
               { className: "chat-input" },
               r.createElement("input", {
-                placeholder: H.message,
+                placeholder: `${H.message} · use :sob:`,
                 value: Ql,
+                list: "framia-emoji-names",
                 onChange: (i) => Lc(i.target.value),
-                onKeyDown: (i) => i.key === "Enter" && ar(),
+                onKeyDown: (i) => (i.key === "Enter" ? ar() : i.key === "Tab" && setEmojiOpen(!1)),
               }),
+              r.createElement(
+                "datalist",
+                { id: "framia-emoji-names" },
+                Object.entries(EMOJI_NAMES).map(([i, s]) =>
+                  r.createElement("option", { key: i, value: `:${i}:` }, `${s} ${i}`),
+                ),
+              ),
+              r.createElement(
+                "button",
+                {
+                  type: "button",
+                  className: emojiOpen ? "emoji-toggle open" : "emoji-toggle",
+                  title: "Emojis",
+                  "aria-label": "Emojis",
+                  "aria-expanded": emojiOpen,
+                  onClick: () => setEmojiOpen((i) => !i),
+                },
+                "😀",
+              ),
               r.createElement(
                 "button",
                 { onClick: ar },
                 r.createElement(Up, { size: 16 }),
               ),
             ),
+            emojiOpen &&
+              r.createElement(
+                "div",
+                { className: "emoji-picker" },
+                r.createElement("small", null, "Digite :nome: para converter automaticamente"),
+                r.createElement(
+                  "div",
+                  { className: "emoji-grid" },
+                  Object.entries(EMOJI_NAMES).map(([i, s]) =>
+                    r.createElement(
+                      "button",
+                      {
+                        key: i,
+                        type: "button",
+                        title: `:${i}:`,
+                        onClick: () => {
+                          (Lc((h) => `${h}${s}`), setEmojiOpen(!1));
+                        },
+                      },
+                      s,
+                    ),
+                  ),
+                ),
+              ),
           ),
         _o.map((i) =>
           r.createElement(
@@ -23679,13 +24039,43 @@ function cg() {
                 ? r.createElement(
                     "div",
                     { className: "modal-body shortcuts-list" },
-                    Lu.map(([, i, s, h]) =>
+                    Lu.map(([, i, s]) =>
                       r.createElement(
                         "div",
                         { key: i },
                         r.createElement("span", null, s),
-                        r.createElement("kbd", null, h),
+                        r.createElement(
+                          "kbd",
+                          {
+                            className: "shortcut-key",
+                            tabIndex: 0,
+                            role: "button",
+                            title: "Clique e pressione a tecla desejada",
+                            "aria-label": `${s}: atalho atual`,
+                            onKeyDown: (h) => {
+                              (h.preventDefault(), h.stopPropagation());
+                              const y = h.key.toLowerCase();
+                              if (h.key === "Escape" || h.key === "Tab" || h.key === "Enter") return;
+                              if (!/^[a-z0-9]$/.test(y)) return;
+                              setShortcuts((R) => {
+                                const U = { ...R };
+                                for (const X of Object.keys(U)) if (U[X] === y) U[X] = R[i];
+                                return ((U[i] = y), saveShortcuts(U));
+                              });
+                            },
+                          },
+                          (shortcuts[i] || "").toUpperCase(),
+                        ),
                       ),
+                    ),
+                    r.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "ghost-button",
+                        onClick: () => setShortcuts(saveShortcuts({ ...SHORTCUT_DEFAULTS })),
+                      },
+                      "Restaurar atalhos padrão",
                     ),
                     [
                       ["P", H.brushes],
@@ -23726,11 +24116,14 @@ function cg() {
                               r.createElement(
                                 "button",
                                 {
-                                  onClick: () => {
-                                    (navigator.clipboard.writeText(
-                                      location.href,
-                                    ),
-                                      He("Link copiado"));
+                                  onClick: async () => {
+                                    const invite = `${location.origin}${location.pathname}?room=${encodeURIComponent(nl)}`;
+                                    try {
+                                      await copyText(invite);
+                                      He("Link copiado", "Quem tiver o link pode pedir entrada nesta sala.");
+                                    } catch (i) {
+                                      He("Não foi possível copiar", i.message);
+                                    }
                                   },
                                 },
                                 r.createElement(zo, { size: 15 }),
@@ -23987,6 +24380,26 @@ function cg() {
                                 ? "+ Horizontal"
                                 : "+ Horizontal",
                           ),
+                            r.createElement(
+                              "button",
+                              {
+                                type: "button",
+                                className: "ghost-button",
+                                title: "Guia circular",
+                                onClick: () => addGuideShape("circle"),
+                              },
+                              "+ Círculo",
+                            ),
+                            r.createElement(
+                              "button",
+                              {
+                                type: "button",
+                                className: "ghost-button",
+                                title: "Guia retangular",
+                                onClick: () => addGuideShape("rect"),
+                              },
+                              "+ Retângulo",
+                            ),
                           (z.guides || []).length > 0 &&
                             r.createElement(
                               "button",

@@ -187,6 +187,8 @@ async function api(request, env, signedIn) {
       if (path.length === 4 && path[3] === 'stroke' && request.method === 'POST') {
         const { frameId, layerId, elements } = await readJson(request, 1_000_000);
         if (typeof frameId !== 'string' || typeof layerId !== 'string' || !Array.isArray(elements) || elements.length > 500) return error('Invalid stroke', 400);
+        // Every element needs a stable id so a retried request cannot draw twice.
+        if (elements.some((element) => !element || typeof element !== 'object' || typeof element.id !== 'string' || element.id.length > 100)) return error('Invalid stroke', 400);
         for (let attempt = 0; attempt < 5; attempt++) {
           const row = await env.DB.prepare('SELECT revision,body FROM framia_rooms_v2 WHERE code=?').bind(code).first();
           if (!row) return error('Room not found', 404);
@@ -194,12 +196,42 @@ async function api(request, env, signedIn) {
           if (!project.frames.some((frame) => frame.id === frameId) || !project.layers.some((layer) => layer.id === layerId)) return error('Frame or layer missing', 400);
           project.content[frameId] ??= {};
           project.content[frameId][layerId] ??= [];
-          project.content[frameId][layerId].push(...elements);
+          const known = new Set(project.content[frameId][layerId].map((element) => element.id));
+          const additions = elements.filter((element) => !known.has(element.id)).map((element) => ({ ...element, authorId: user.sub }));
+          if (!additions.length) return json({ revision: row.revision, created: 0 });
+          project.content[frameId][layerId].push(...additions);
           const result = await env.DB.prepare('UPDATE framia_rooms_v2 SET revision=revision+1,body=? WHERE code=? AND revision=?')
             .bind(JSON.stringify(project), code, row.revision).run();
           if (result.meta.changes) {
             await publish(env, code, row.revision + 1);
-            return json({ revision: row.revision + 1 });
+            return json({ revision: row.revision + 1, created: additions.length });
+          }
+        }
+        return error('Room changed', 409);
+      }
+      if (path.length === 4 && path[3] === 'undo' && request.method === 'POST') {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const row = await env.DB.prepare('SELECT revision,body FROM framia_rooms_v2 WHERE code=?').bind(code).first();
+          if (!row) return error('Room not found', 404);
+          const project = JSON.parse(row.body);
+          let latest = null;
+          for (const frame of project.frames) {
+            for (const layer of project.layers) {
+              const layerElements = project.content?.[frame.id]?.[layer.id] || [];
+              for (const element of layerElements) {
+                if (element.authorId !== user.sub) continue;
+                const createdAt = element.createdAt || 0;
+                if (!latest || createdAt >= latest.createdAt) latest = { frameId: frame.id, layerId: layer.id, element, createdAt };
+              }
+            }
+          }
+          if (!latest) return json({ revision: row.revision, removed: false });
+          project.content[latest.frameId][latest.layerId] = project.content[latest.frameId][latest.layerId].filter((element) => element.id !== latest.element.id);
+          const result = await env.DB.prepare('UPDATE framia_rooms_v2 SET revision=revision+1,body=? WHERE code=? AND revision=?')
+            .bind(JSON.stringify(project), code, row.revision).run();
+          if (result.meta.changes) {
+            await publish(env, code, row.revision + 1);
+            return json({ revision: row.revision + 1, removed: true });
           }
         }
         return error('Room changed', 409);

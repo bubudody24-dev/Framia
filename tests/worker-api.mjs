@@ -47,6 +47,19 @@ assert.equal((await call('/api/rooms/' + code, { user: userB })).result.revision
 const stroke = await call('/api/rooms/' + code + '/stroke', { method: 'POST', user: userA, data: { frameId: 'f1', layerId: 'l1', elements: [{ id: 's1', type: 'line', points: [{ x: 1, y: 1 }, { x: 3, y: 3 }] }] } });
 assert.equal(stroke.status, 200, JSON.stringify(stroke.result));
 assert.equal((await call('/api/rooms/' + code, { user: userB })).result.project.content.f1.l1.length, 1);
+assert.equal((await call('/api/rooms/' + code + '/stroke', { method: 'POST', user: userA, data: { frameId: 'f1', layerId: 'l1', elements: [{ id: 's1', type: 'line' }] } })).status, 200);
+assert.equal((await call('/api/rooms/' + code, { user: userB })).result.project.content.f1.l1.length, 1, 'duplicate stroke IDs must be idempotent');
+const [strokeA, strokeB] = await Promise.all([
+  call('/api/rooms/' + code + '/stroke', { method: 'POST', user: userA, data: { frameId: 'f1', layerId: 'l1', elements: [{ id: 's2', type: 'line', createdAt: 2 }] } }),
+  call('/api/rooms/' + code + '/stroke', { method: 'POST', user: userB, data: { frameId: 'f1', layerId: 'l1', elements: [{ id: 's3', type: 'line', createdAt: 3 }] } }),
+]);
+assert.equal(strokeA.status, 200);
+assert.equal(strokeB.status, 200);
+let shared = (await call('/api/rooms/' + code, { user: userA })).result.project.content.f1.l1;
+assert.deepEqual(new Set(shared.map((element) => element.id)), new Set(['s1', 's2', 's3']), 'simultaneous strokes must merge');
+assert.equal((await call('/api/rooms/' + code + '/undo', { method: 'POST', user: userA, data: {} })).status, 200);
+shared = (await call('/api/rooms/' + code, { user: userA })).result.project.content.f1.l1;
+assert.deepEqual(new Set(shared.map((element) => element.id)), new Set(['s1', 's3']), 'undo must only remove the current user latest stroke');
 assert.equal((await call('/api/rooms/' + code, { method: 'PUT', user: userA, data: { baseRevision: 1, project } })).status, 409);
 assert.equal((await call('/api/rooms/' + code + '/media/test', { method: 'PUT', user: userA, body: 'media bytes', contentType: 'text/plain' })).status, 200);
 assert.equal((await call('/api/rooms/' + code + '/media/test', { user: userB })).result, 'media bytes');
@@ -78,7 +91,7 @@ const reconnected = new WebSocket(reconnectTicket.result.websocketUrl, { headers
 const reconnectMessages = [];
 reconnected.addEventListener('message', (event) => reconnectMessages.push(JSON.parse(event.data)));
 await until(() => reconnectMessages.some((message) => message.type === 'ready'));
-assert.equal((await call('/api/rooms/' + code, { user: userB })).result.project.content.f1.l1.length, 1);
+assert.equal((await call('/api/rooms/' + code, { user: userB })).result.project.content.f1.l1.length, 2);
 first.close();
 reconnected.close();
 assert.equal((await call('/api/projects/' + id, { method: 'DELETE', user: userA })).status, 200);

@@ -148,3 +148,37 @@
 .friend-text{display:flex;flex-direction:column;flex:1;min-width:0}
 .friend-text b{font-size:12px;color:#e8e9f2;overflow:hidden;text-overflow:ellipsis}
 .friend-text small{font-size:10px;color:#7b8095}
+
+/* Chat identity, emoji picker and guide shapes ------------------------- */
+.chat-message{display:flex;align-items:flex-start;gap:9px}
+.chat-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;flex:none;background:#332e4a}
+.chat-avatar-fallback{display:grid;place-items:center;color:#efe9ff;font-weight:800;font-size:12px}
+.chat-message-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.chat-message-body p{margin:0;overflow-wrap:anywhere}
+.chat-author small{color:#9d92c9;font-weight:600;margin-left:4px;font-size:9px}
+.emoji-toggle{background:none;border:0;font-size:16px;line-height:1;padding:4px 6px;border-radius:6px}
+.emoji-toggle.open,.emoji-toggle:hover{background:#332e4a}
+.emoji-picker{position:absolute;right:12px;bottom:56px;z-index:40;width:min(268px,86vw);max-height:210px;overflow:auto;padding:8px;background:#1e2030;border:1px solid #54506a;border-radius:11px;box-shadow:0 16px 38px #000a;display:flex;flex-direction:column;gap:6px}
+.emoji-picker small{color:#9a94b6;font-size:9px}
+.emoji-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px}
+.emoji-grid button{border:0;background:none;font-size:17px;line-height:1;padding:4px;border-radius:6px}
+.emoji-grid button:hover{background:#3a3452}
+.chat-panel{position:relative}
+.guide-shape{position:absolute;border:1px dashed #a394ff;background:#a394ff12;pointer-events:auto;touch-action:none;cursor:move}
+.guide-shape.circle{border-radius:50%}
+.guide-shape-knob{position:absolute;right:-5px;bottom:-5px;width:10px;height:10px;border-radius:3px;background:#a394ff;border:1px solid #221f36;cursor:nwse-resize;touch-action:none}
+
+/* FPS panel and shortcut editor ---------------------------------------- */
+.fps-label{border:0;background:none;color:#9a9cb0;font:inherit;font-size:10px;padding:3px 7px;border-radius:6px;cursor:pointer}
+.fps-label:hover,.fps-label.open{background:#2c2a3d;color:#d7d2ee}
+.fps-panel{position:absolute;right:12px;top:12px;z-index:9;display:flex;flex-direction:column;gap:5px;min-width:186px;padding:9px 10px;background:#14161fdd;border:1px solid #3b3a52;border-radius:10px;box-shadow:0 12px 30px #0008;backdrop-filter:blur(6px)}
+.fps-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fps-panel-head b{font-size:15px;color:#d9d2ff;font-variant-numeric:tabular-nums}
+.fps-panel small{color:#9a9cb0;font-size:10px;line-height:1.35}
+.fps-video-row{display:flex;justify-content:space-between;gap:10px}
+.fps-video-row span:first-child{color:#cfc8e8;max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fps-close{border:0;background:none;color:#9a9cb0;font-size:15px;line-height:1;padding:0 3px;border-radius:4px}
+.fps-close:hover{background:#332f47;color:#fff}
+.shortcuts-list kbd.shortcut-key{min-width:52px;text-align:center;cursor:pointer;background:#1b1d29;border:1px solid #44425c;color:#e6e0ff;font-weight:700;padding:5px 8px}
+.shortcuts-list kbd.shortcut-key:focus{outline:2px solid #8f7ee8;outline-offset:1px;background:#2a2540}
+.shortcut-key:focus{outline:2px solid #8f7ee8;outline-offset:1px}
