@@ -18630,6 +18630,11 @@ function cg() {
         (Ui(h),
           setAccounts(framiaRememberAccount(h)),
           await framiaUseAccount(h));
+        if (h)
+          try {
+            const y = await bu("/api/profile", "GET");
+            active && y && y.profile && setProfile(y.profile);
+          } catch {}
         if (!active) return;
         try {
           (qn(framiaLoadBrushes()), Nl(await ym()));
