@@ -17699,7 +17699,7 @@ class ag {
         .then(async () => {
           if (!this.closed)
             try {
-              await d();
+              return await d();
             } catch (v) {
               this.onError(v);
             }
@@ -17724,6 +17724,7 @@ class ag {
     return this.enqueue(async () => {
       const d = await bu(`/api/rooms/${this.code}/undo`, "POST", {});
       this.revision = d.revision;
+      return d;
     });
   }
   mutation(d) {
@@ -18597,6 +18598,7 @@ function cg() {
     Wt = Y.useRef(null),
     fa = Y.useRef([]),
     Ht = Y.useRef([]),
+    rl_redo = Y.useRef([]),
     Il = Y.useRef(null),
     Vn = Y.useRef(Ke()),
     xl = Y.useRef(null),
@@ -18756,6 +18758,7 @@ function cg() {
       (fa.current.push(y),
         fa.current.length > 12 && fa.current.shift(),
         (Ht.current = []),
+        (rl_redo.current = []),
         (bt.current = U),
         te(U),
         (X = Ct.current) == null ||
@@ -18793,22 +18796,43 @@ function cg() {
           h &&
           queueRoomMutation((y) => Object.assign(y, structuredClone(i))));
     },
-    Uu = () => {
+    Uu = async () => {
       (B(null), rt(null), ia(null));
       if (Ct.current) {
-        Ct.current.undo();
+        const i = await Ct.current.undo();
+        i &&
+          i.removed &&
+          i.element &&
+          (rl_redo.current.push({
+            frameId: i.frameId,
+            layerId: i.layerId,
+            element: i.element,
+          }),
+          rl_redo.current.length > 30 && rl_redo.current.shift());
         return;
       }
       const i = fa.current.pop();
       i && (Ht.current.push(bt.current), _u(i));
     },
-    ol = () => {
+    ol = async () => {
       (B(null), rt(null), ia(null));
       if (Ct.current) {
-        He(
-          "Refazer indisponível na sala",
-          "Cada pessoa desfaz apenas as próprias ações. Refazer reaplicaria um estado antigo e sobrescreveria o desenho dos outros.",
-        );
+        const i = rl_redo.current.pop();
+        if (!i) {
+          He(
+            "Nada para refazer",
+            "Cada pessoa só refaz as próprias ações nesta sala.",
+          );
+          return;
+        }
+        try {
+          await Ct.current.stroke(i.frameId, i.layerId, [
+            { ...i.element, createdAt: i.element.createdAt || Date.now() },
+          ]);
+        } catch (s) {
+          (rl_redo.current.push(i),
+            He("Não foi possível refazer", s && s.message ? s.message : ""));
+        }
         return;
       }
       const i = Ht.current.pop();
@@ -20994,6 +21018,7 @@ function cg() {
         },
       });
       ((Ct.current = y),
+        (rl_redo.current = []),
         y.refresh(!0),
         Mt &&
           y.presence({
@@ -21113,6 +21138,7 @@ function cg() {
         k({}),
         (i = Ct.current) == null || i.close(),
         (Ct.current = null),
+        (rl_redo.current = []),
         (Du.current = null),
         kc(null),
         wa([]),

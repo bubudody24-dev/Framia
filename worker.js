@@ -231,7 +231,7 @@ async function api(request, env, signedIn) {
             .bind(JSON.stringify(project), code, row.revision).run();
           if (result.meta.changes) {
             await publish(env, code, row.revision + 1);
-            return json({ revision: row.revision + 1, removed: true });
+            return json({ revision: row.revision + 1, removed: true, frameId: latest.frameId, layerId: latest.layerId, element: latest.element });
           }
         }
         return error('Room changed', 409);
