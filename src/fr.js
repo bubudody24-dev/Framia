@@ -21024,6 +21024,8 @@ function cg() {
       });
       ((Ct.current = y),
         (rl_redo.current = []),
+        (fa.current = []),
+        (Ht.current = []),
         y.refresh(!0),
         Mt &&
           y.presence({
@@ -21144,12 +21146,15 @@ function cg() {
         (i = Ct.current) == null || i.close(),
         (Ct.current = null),
         (rl_redo.current = []),
+        (fa.current = []),
+        (Ht.current = []),
         (Du.current = null),
         kc(null),
         wa([]),
         _i("offline"),
         window.history.replaceState(null, "", location.pathname));
     },
+    Yq = () => (Vo(), ul("home")),
     ar = () => {
       var s, h;
       if (!Ql.trim()) return;
@@ -23852,7 +23857,7 @@ function cg() {
                 null,
                 r.createElement(cm, { size: 17 }),
                 r.createElement("b", null, H.chat),
-                r.createElement("small", null, H.collab),
+                r.createElement("small", null, nl ? `Sala ${nl}` : H.collab),
               ),
               r.createElement(
                 "button",
@@ -24170,7 +24175,7 @@ function cg() {
                             ),
                             r.createElement(
                               "button",
-                              { className: "subtle-wide", onClick: Vo },
+                              { className: "subtle-wide", onClick: Yq },
                               "Sair da sala",
                             ),
                           )
