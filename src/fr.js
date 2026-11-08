@@ -16894,6 +16894,12 @@ function framiaTime(o) {
     f = d % 60;
   return `${String(v).padStart(2, "0")}:${String(f).padStart(2, "0")}`;
 }
+function framiaClock(o) {
+  const d = Math.max(0, o || 0),
+    v = Math.floor(d / 60),
+    f = d % 60;
+  return `${String(v).padStart(2, "0")}:${f.toFixed(1).padStart(4, "0")}`;
+}
 function framiaQuad(o, r) {
   const d = G1(Yc(o));
   return d ? bm(r, d) : null;
@@ -23961,12 +23967,8 @@ function cg() {
               ),
               r.createElement(
                 "span",
-                { className: "time-readout" },
-                String(Math.floor(K / 60)).padStart(2, "0"),
-                ":",
-                String(Math.floor(K % 60)).padStart(2, "0"),
-                ":",
-                String(Math.floor(K * z.fps) % z.fps).padStart(2, "0"),
+                { className: "time-readout", title: "Tempo em segundos" },
+                framiaClock(K),
               ),
               r.createElement(
                 "span",
@@ -24135,7 +24137,7 @@ function cg() {
                 r.createElement(
                   "div",
                   { className: "timeline-hover", style: { left: Et * ma } },
-                  r.createElement("span", null, framiaTime(Et / z.fps)),
+                  r.createElement("span", null, framiaClock(Et / z.fps)),
                 ),
               r.createElement(
                 "div",
