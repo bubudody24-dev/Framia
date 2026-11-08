@@ -18660,6 +18660,7 @@ function cg() {
     [gt, Qe] = Y.useState(!1),
     [$t, Aa] = Y.useState(!1),
     [Va, ia] = Y.useState(null),
+    [layerMenu, setLayerMenu] = Y.useState(null),
     [$e, rt] = Y.useState(null),
     [jn, Vl] = Y.useState(null),
     [Me, Ai] = Y.useState(localStorage.getItem("framia-language") || "pt"),
@@ -22789,6 +22790,149 @@ function cg() {
                     },
                     r.createElement(Hc, { size: 14 }),
                   ),
+                r.createElement(
+                  "div",
+                  { className: "layers-anchor" },
+                  r.createElement(
+                    "button",
+                    {
+                      className: `mini-toggle layers-trigger ${layerMenu ? "on" : ""}`,
+                      title: H.layers,
+                      "aria-haspopup": "true",
+                      "aria-expanded": !!layerMenu,
+                      onClick: (h) => {
+                        if (layerMenu) return setLayerMenu(null);
+                        const b = h.currentTarget.getBoundingClientRect();
+                        setLayerMenu({
+                          top: Math.round(b.bottom + 7),
+                          right: Math.max(8, Math.round(window.innerWidth - b.right)),
+                        });
+                      },
+                    },
+                    r.createElement(Mi, { size: 14 }),
+                    z.layers.length,
+                  ),
+                  layerMenu &&
+                    r.createElement(
+                      r.Fragment,
+                      null,
+                      r.createElement("div", {
+                        className: "layers-backdrop",
+                        onPointerDown: () => setLayerMenu(null),
+                      }),
+                      r.createElement(
+                        "div",
+                        {
+                          className: "layers-popover",
+                          style: { top: layerMenu.top, right: layerMenu.right },
+                        },
+                        r.createElement(
+                          "div",
+                          { className: "layers-popover-head" },
+                          r.createElement("span", null, H.layers),
+                          r.createElement(
+                            "button",
+                            {
+                              type: "button",
+                              className: "text-link",
+                              onClick: () => Kc(),
+                            },
+                            r.createElement(_c, { size: 13 }),
+                            H.addLayer,
+                          ),
+                        ),
+                        r.createElement(
+                          "div",
+                          { className: "layers-popover-list" },
+                          z.layers
+                            .slice()
+                            .reverse()
+                            .map((i) => {
+                              const eyeLabel = i.visible
+                                ? Me === "en"
+                                  ? "Hide layer"
+                                  : Me === "es"
+                                    ? "Ocultar capa"
+                                    : "Ocultar camada"
+                                : Me === "en"
+                                  ? "Show layer"
+                                  : Me === "es"
+                                    ? "Mostrar capa"
+                                    : "Mostrar camada";
+                              return r.createElement(
+                                "div",
+                                {
+                                  key: i.id,
+                                  className: `layers-popover-row ${ee === i.id ? "selected" : ""}`,
+                                },
+                                r.createElement(
+                                  "button",
+                                  {
+                                    type: "button",
+                                    className: `eye ${i.visible ? "" : "off"}`,
+                                    title: eyeLabel,
+                                    "aria-label": eyeLabel,
+                                    "aria-pressed": i.visible,
+                                    onPointerDown: (h) => h.stopPropagation(),
+                                    onClick: (h) => {
+                                      (h.stopPropagation(),
+                                        De((y) => {
+                                          const R = y.layers.find(
+                                            (U) => U.id === i.id,
+                                          );
+                                          R && (R.visible = !i.visible);
+                                        }));
+                                    },
+                                  },
+                                  i.visible
+                                    ? r.createElement(Ep, { size: 14 })
+                                    : r.createElement(gp, { size: 14 }),
+                                ),
+                                r.createElement(
+                                  "button",
+                                  {
+                                    type: "button",
+                                    className: "layers-popover-name",
+                                    onClick: () => Ee(i.id),
+                                  },
+                                  r.createElement("b", null, i.name),
+                                  r.createElement(
+                                    "small",
+                                    null,
+                                    Math.round((i.opacity ?? 1) * 100),
+                                    "%",
+                                  ),
+                                ),
+                              );
+                            }),
+                        ),
+                        r.createElement(
+                          "div",
+                          { className: "layers-popover-opacity" },
+                          r.createElement(
+                            "div",
+                            { className: "field-label" },
+                            r.createElement("span", null, H.opacity, " · ", Ue.name),
+                            r.createElement(
+                              "strong",
+                              null,
+                              Math.round((Ue.opacity ?? 1) * 100),
+                              "%",
+                            ),
+                          ),
+                          r.createElement("input", {
+                            type: "range",
+                            min: "0",
+                            max: "100",
+                            step: "1",
+                            value: Math.round((Ue.opacity ?? 1) * 100),
+                            onChange: (i) =>
+                              Jc("opacity", Math.max(0, +i.target.value) / 100),
+                          }),
+                        ),
+                      ),
+                    ),
+                ),
                 r.createElement("span", { className: "toolbar-sep" }),
                 r.createElement(
                   "button",

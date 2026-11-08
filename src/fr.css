@@ -189,3 +189,21 @@
 .annotation-canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:4;pointer-events:none}
 .annotation-canvas.drawing{pointer-events:auto;cursor:crosshair;touch-action:none}
 .annotation-canvas.hidden{display:none}
+.layers-anchor{position:relative;display:flex;align-items:center}
+.layers-trigger{gap:5px;min-width:46px;justify-content:center}
+.layers-trigger.on{border-color:#7164b9;background:#322d4b;color:#d5caff}
+.layers-backdrop{position:fixed;top:0;right:0;bottom:0;left:0;z-index:6}
+.layers-popover{position:fixed;z-index:7;width:254px;padding:11px;background:#20222d;border:1px solid #4a4759;border-radius:10px;box-shadow:0 18px 44px #000a;display:flex;flex-direction:column;gap:9px}
+.layers-popover-head{display:flex;align-items:center;justify-content:space-between;color:#cfcedb;font-size:10px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase}
+.layers-popover-list{display:flex;flex-direction:column;gap:5px;max-height:min(46vh,268px);overflow:auto}
+.layers-popover-row{display:flex;align-items:center;gap:3px;padding:2px;background:#232530;border:1px solid #3b3c49;border-radius:7px}
+.layers-popover-row.selected{background:#302d42;border-color:#7465b6}
+.layers-popover-row .eye{width:27px;height:27px;flex:none;display:grid;place-items:center;border:0;background:none;color:#c2c3d2;border-radius:5px}
+.layers-popover-row .eye:hover{background:#3a3550;color:#efe9ff}
+.layers-popover-row .eye.off{color:#6f7183}
+.layers-popover-name{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:0;background:none;color:#e6e5ef;padding:3px 2px;text-align:left}
+.layers-popover-name b{font-size:11px;font-weight:700;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.layers-popover-name small{font-size:9px;color:#9b9cac}
+.layers-popover-opacity{border-top:1px solid #353743;padding-top:5px}
+.layers-popover-opacity .field-label{margin:6px 0 7px;font-size:10px}
+.layers-popover-opacity input[type=range]{width:100%;height:4px;accent-color:var(--accent)}
