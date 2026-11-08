@@ -102,12 +102,27 @@ async function publish(env, code, revision) {
   if (env.REALTIME) await publishRealtime(env, { room: `project:${code}`, event: 'project-updated', data: { revision } }).catch(() => {});
 }
 
+// Testing aid: the account named in FRAMIA_TEST_OWNER may act as a throwaway
+// participant by sending the x-framia-test header, so the owner can check a
+// room with two people. The binding only exists on the preview deployment, so
+// every other visitor and any production build keeps their real identity.
+const TEST_SLUG = /^[a-z0-9][a-z0-9-]{0,20}$/;
+
+function testIdentity(request, env, user) {
+  const owner = env.FRAMIA_TEST_OWNER;
+  if (!owner || user.sub !== owner) return user;
+  const slug = (request.headers.get('x-framia-test') || '').trim().toLowerCase();
+  if (!TEST_SLUG.test(slug)) return user;
+  return { sub: `framia-test:${slug}`, name: `Convidado ${slug}`, email: '', email_verified: false, picture: '' };
+}
+
 async function api(request, env, signedIn) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
   if (request.method !== 'GET' && !isSameOriginRequest(request, env.APP_ORIGIN)) return error('Origin forbidden', 403);
-  const user = await signedIn.getUser(request);
-  if (!user) return error('Sign in required', 401);
+  const signedInUser = await signedIn.getUser(request);
+  if (!signedInUser) return error('Sign in required', 401);
+  const user = testIdentity(request, env, signedInUser);
   await ensureSchema(env);
   const path = url.pathname.split('/').filter(Boolean);
 

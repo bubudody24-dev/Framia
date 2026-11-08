@@ -23,6 +23,20 @@ bunx wrangler dev --local -c wrangler.jsonc --inspector-port 9229
 
 Start the realtime helper first. The local Worker has a development Freebuff client registered for `http://localhost:8787`; the cloud VM's browser preview cannot complete a login on that loopback origin. The development DB and file bucket are local and isolated from the published site. `deploy.json` bundles the Worker and public build output for Sites. The preview deployment is at https://site-6c03c284779643b28450b656c5d30361.freebuff.page/.
 
+## Testing a room with two participants (preview only)
+
+One person can check a room end to end: open the same preview URL in a second
+tab with `?as=<name>` (for example `?as=beta`). That tab sends an
+`x-framia-test` header and the Worker answers as `Convidado <name>` for every
+request in it, so room membership, chat, presence, cursors, strokes and
+realtime tickets all belong to the throwaway participant.
+
+The Worker honours the header only when `FRAMIA_TEST_OWNER` is set and the
+signed-in account matches it. The binding exists on the preview deployment
+alone, so any other visitor — and any build without it — keeps their real
+identity; deleting the secret switches the aid off completely. The identity
+travels in a per-tab header rather than a cookie because tabs share cookies.
+
 ## Accounts on this device
 
 The header (home and editor) shows the signed-in Freebuff account with an expand
