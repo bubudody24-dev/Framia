@@ -24021,9 +24021,15 @@ function cg() {
             { className: "timeline-head" },
             r.createElement(
               "div",
-              { className: "timeline-label" },
-              r.createElement(No, { size: 15 }),
-              r.createElement("span", null, H.timeline),
+              {
+                className: "timeline-label",
+                title: `${framiaClock(K)} / ${framiaClock(Hn(z.frames) / z.fps)}`,
+              },
+              r.createElement(
+                "span",
+                { className: `timeline-now ${$t ? "playing" : ""}` },
+                framiaClock(K),
+              ),
             ),
             r.createElement(
               "div",
