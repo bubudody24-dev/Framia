@@ -16853,6 +16853,23 @@ function jc(o) {
         (g = Math.max(g, N.y)));
   return { x: d, y: v, w: Math.max(1, f - d), h: Math.max(1, g - v) };
 }
+function Lg1(o, d, v) {
+  const f = d.x - o.x,
+    g = d.y - o.y,
+    b = v.x - o.x,
+    N = v.y - o.y,
+    M = b * b + N * N,
+    B = M ? Math.max(0, Math.min(1, (f * b + g * N) / M)) : 0;
+  return Math.hypot(f - b * B, g - N * B);
+}
+function Lg2(o, d) {
+  const v = o.points || [];
+  if (!v.length) return 1 / 0;
+  if (v.length === 1) return Math.hypot(d.x - v[0].x, d.y - v[0].y);
+  let f = 1 / 0;
+  for (let g = 1; g < v.length; g++) f = Math.min(f, Lg1(v[g - 1], v[g], d));
+  return f;
+}
 function Vp(o, d, v = 0) {
   const f = G1(Yc(o));
   if (!f) return !1;
@@ -16862,8 +16879,43 @@ function Vp(o, d, v = 0) {
     g.x >= b.x - v &&
     g.x <= b.x + b.w + v &&
     g.y >= b.y - v &&
-    g.y <= b.y + b.h + v
+    g.y <= b.y + b.h + v &&
+    (o.type !== "stroke" || Lg2(o, g) <= v + Math.max(2, (o.size || 1) / 2))
   );
+}
+function Lg3(o, d, v, f) {
+  const g = (q, w, p) =>
+    Math.sign((w.x - q.x) * (p.y - q.y) - (w.y - q.y) * (p.x - q.x));
+  return g(o, d, v) !== g(o, d, f) && g(v, f, o) !== g(v, f, d);
+}
+function Lg4(o, d) {
+  const v = jc([o]);
+  if (
+    !(
+      v.x <= d.x + d.w &&
+      v.x + v.w >= d.x &&
+      v.y <= d.y + d.h &&
+      v.y + v.h >= d.y
+    )
+  )
+    return !1;
+  if (o.type !== "stroke") return !0;
+  const f = Yc(o),
+    g = (o.points || []).map((b) => Cm(f, b));
+  if (!g.length) return !0;
+  const b = (N) =>
+    N.x >= d.x && N.x <= d.x + d.w && N.y >= d.y && N.y <= d.y + d.h;
+  if (g.some(b)) return !0;
+  const N = [
+    { x: d.x, y: d.y },
+    { x: d.x + d.w, y: d.y },
+    { x: d.x + d.w, y: d.y + d.h },
+    { x: d.x, y: d.y + d.h },
+  ];
+  for (let M = 1; M < g.length; M++)
+    for (let B = 0; B < 4; B++)
+      if (Lg3(g[M - 1], g[M], N[B], N[(B + 1) % 4])) return !0;
+  return !1;
 }
 function wo(o, d, v) {
   return { ...o, matrix: Xp(xi(d, v), Yc(o)) };
@@ -17998,6 +18050,8 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       send: "Enviar",
       copy: "Copiar",
       paste: "Colar",
+      group: "Agrupar",
+      ungroup: "Desagrupar",
       rename: "Renomear",
       addLayer: "Nova camada",
       hide: "Ocultar",
@@ -18073,6 +18127,8 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       send: "Send",
       copy: "Copy",
       paste: "Paste",
+      group: "Group",
+      ungroup: "Ungroup",
       rename: "Rename",
       addLayer: "New layer",
       hide: "Hide",
@@ -18147,6 +18203,8 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       send: "Enviar",
       copy: "Copiar",
       paste: "Pegar",
+      group: "Agrupar",
+      ungroup: "Desagrupar",
       rename: "Renombrar",
       addLayer: "Nueva capa",
       hide: "Ocultar",
@@ -19241,11 +19299,22 @@ function cg() {
             ? void 0
             : X[s]) || [],
         y = new Set(i),
-        R = jc(h.filter(($) => y.has($.id)));
+        Pg = new Set(
+          h.filter(($) => y.has($.id) && $.group).map(($) => $.group),
+        ),
+        Gi2 = [
+          ...new Set([
+            ...i,
+            ...h
+              .filter(($) => $.group && Pg.has($.group))
+              .map(($) => $.id),
+          ]),
+        ],
+        R = jc(h.filter(($) => Gi2.includes($.id)));
       return (
         Ee(s),
-        ia(i[0] || null),
-        B(R ? { ids: i, box: R, frameId: ze.id, layerId: s } : null),
+        ia(Gi2[0] || null),
+        B(R ? { ids: Gi2, box: R, frameId: ze.id, layerId: s } : null),
         rt(R ? {} : null),
         R
       );
@@ -19305,16 +19374,27 @@ function cg() {
       if (!ze) return;
       if (pe === "transform" || pe === "select") {
         if (Ue.locked || !Ue.visible) return;
+        const tol = (() => {
+          const c = i.currentTarget,
+            r = c && c.getBoundingClientRect();
+          return r && r.width
+            ? Math.max(4, (8 * (c.width || r.width)) / r.width)
+            : 8;
+        })();
         if (M && $e) {
           const R = G1(xi(M.box, $e)),
             U = R && Cm(R, s),
             X = M.box;
+          const selHit =
+            !i.shiftKey &&
+            mt.some((R2) => M.ids.includes(R2.id) && Vp(R2, s, tol));
           if (
-            U &&
-            U.x >= X.x &&
-            U.x <= X.x + X.w &&
-            U.y >= X.y &&
-            U.y <= X.y + X.h
+            (U &&
+              U.x >= X.x &&
+              U.x <= X.x + X.w &&
+              U.y >= X.y &&
+              U.y <= X.y + X.h) ||
+            selHit
           ) {
             if (!i.shiftKey) {
               Wt.current = { type: "move", start: s, base: $e };
@@ -19322,20 +19402,31 @@ function cg() {
             }
           } else Gi();
         }
-        const y = [...mt].reverse().find((R) => Vp(R, s, 4));
+        const y = [...mt].reverse().find((R) => Vp(R, s, tol));
         if (p === "layer" && mt.length)
           tn(mt.map((U) => U.id)) &&
             (Wt.current = { type: "move", start: s, base: {} });
         else if (y) {
-          const R = i.shiftKey
-            ? [...new Set([...((M == null ? void 0 : M.ids) || []), y.id])]
-            : [y.id];
-          (tn(R), (Wt.current = { type: "move", start: s, base: {} }));
+          const cur = (M && M.ids) || [],
+            R = i.shiftKey
+              ? cur.includes(y.id)
+                ? cur.filter((U) => {
+                    const X = mt.find(($) => $.id === U);
+                    return y.group ? !X || X.group !== y.group : U !== y.id;
+                  })
+                : [...new Set([...cur, y.id])]
+              : [y.id];
+          (tn(R),
+            R.length
+              ? (Wt.current = { type: "move", start: s, base: {} })
+              : (Wt.current = null));
         } else
-          (B(null),
-            ia(null),
-            rt(null),
-            (Wt.current = { type: "marquee", start: s }),
+          ((Wt.current = {
+            type: "marquee",
+            start: s,
+            base: i.shiftKey ? ((M && M.ids) || []) : [],
+          }),
+            i.shiftKey || (B(null), ia(null), rt(null)),
             w({ x: s.x, y: s.y, w: 0, h: 0 }));
         return;
       }
@@ -19552,18 +19643,8 @@ function cg() {
       if (i) {
         if (((Wt.current = null), i.type === "marquee")) {
           if (q) {
-            const s = mt
-              .filter((h) => {
-                const y = jc([h]);
-                return (
-                  y.x <= q.x + q.w &&
-                  y.x + y.w >= q.x &&
-                  y.y <= q.y + q.h &&
-                  y.y + y.h >= q.y
-                );
-              })
-              .map((h) => h.id);
-            tn(s);
+            const s = mt.filter((h) => Lg4(h, q)).map((h) => h.id);
+            tn([...new Set([...(i.base || []), ...s])]);
           }
           w(null);
           return;
@@ -19641,7 +19722,16 @@ function cg() {
       const i = M && M.ids.length ? M.ids : Va ? [Va] : [],
         s = mt.filter((h) => i.includes(h.id));
       if (!s.length || !ze || Ue.locked) return !1;
-      const h = s.map((y) => ({ ...wo(y, jc(s), { x: 28, y: 28 }), id: Ke() }));
+      const gmap = new Map(),
+        h = s.map((y) => {
+          const R = { ...wo(y, jc(s), { x: 28, y: 28 }), id: Ke() };
+          return (
+            y.group &&
+              (gmap.has(y.group) || gmap.set(y.group, Ke()),
+              (R.group = gmap.get(y.group))),
+            R
+          );
+        });
       return (
         De((y) => {
           var R;
@@ -19650,6 +19740,52 @@ function cg() {
         }),
         he("transform"),
         ia(h[0].id),
+        !0
+      );
+    },
+    groupSelection = () => {
+      const i = M && M.ids.length ? M.ids : Va ? [Va] : [];
+      if (i.length < 2 || !ze || Ue.locked)
+        return (
+          He(
+            Me === "en" ? "Select more elements" : "Selecione mais traços",
+            Me === "en"
+              ? "Grouping needs at least two selected elements."
+              : "Para agrupar, selecione pelo menos dois elementos.",
+          ),
+          !1
+        );
+      const s = Ke();
+      return (
+        De((h) => {
+          const y = h.content?.[ze.id]?.[ee];
+          y &&
+            (h.content[ze.id][ee] = y.map((R) =>
+              i.includes(R.id) ? { ...R, group: s } : R,
+            ));
+        }),
+        He(
+          Me === "en" ? "Group created" : "Grupo criado",
+          Me === "en"
+            ? "The selected elements now move together."
+            : "Os elementos selecionados agora se movem juntos.",
+        ),
+        !0
+      );
+    },
+    ungroupSelection = () => {
+      const i = M && M.ids.length ? M.ids : Va ? [Va] : [];
+      if (!i.length || !ze || Ue.locked) return !1;
+      return (
+        De((h) => {
+          const y = h.content?.[ze.id]?.[ee];
+          y &&
+            (h.content[ze.id][ee] = y.map((R) => {
+              if (!R.group || !i.includes(R.id)) return R;
+              const { group: U, ...X } = R;
+              return X;
+            }));
+        }),
         !0
       );
     },
@@ -21256,6 +21392,10 @@ function cg() {
       }
       if ((y.ctrlKey || y.metaKey) && y.key.toLowerCase() === "v") {
         (y.preventDefault(), Jn());
+        return;
+      }
+      if ((y.ctrlKey || y.metaKey) && y.key.toLowerCase() === "g") {
+        (y.preventDefault(), y.shiftKey ? ungroupSelection() : groupSelection());
         return;
       }
       ((y.key === "Delete" || y.key === "Backspace") &&
@@ -22945,8 +23085,8 @@ function cg() {
                           "p",
                           { className: "transform-hint" },
                           Me === "en"
-                            ? "Click a stroke or drag a box to select. Shift-click adds content. The transform applies when you click outside it, switch tools, or press Enter. Esc cancels."
-                            : "Clique em um traço ou arraste uma caixa para selecionar. Shift adiciona. A transformação é aplicada ao clicar fora, trocar de ferramenta ou pressionar Enter. Esc cancela.",
+                            ? "Click a stroke or drag a box to select. Shift-click adds or removes. Ctrl+G groups, Ctrl+Shift+G ungroups. Enter applies the transform, Esc cancels."
+                            : "Clique em um traço ou arraste uma caixa para selecionar. Shift soma ou tira da seleção. Ctrl+G agrupa, Ctrl+Shift+G desagrupa. Enter aplica, Esc cancela.",
                         ),
                         r.createElement(
                           "button",
@@ -23058,6 +23198,23 @@ function cg() {
                                 "button",
                                 { onClick: Jn },
                                 H.paste,
+                              ),
+                            ),
+                            r.createElement(
+                              "div",
+                              { className: "option-grid" },
+                              r.createElement(
+                                "button",
+                                { onClick: groupSelection, title: "Ctrl+G" },
+                                H.group,
+                              ),
+                              r.createElement(
+                                "button",
+                                {
+                                  onClick: ungroupSelection,
+                                  title: "Ctrl+Shift+G",
+                                },
+                                H.ungroup,
                               ),
                             ),
                             r.createElement(
