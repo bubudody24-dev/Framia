@@ -16894,27 +16894,78 @@ function framiaTime(o) {
     f = d % 60;
   return `${String(v).padStart(2, "0")}:${String(f).padStart(2, "0")}`;
 }
-function Lg5(o, d, v = 0.5) {
-  const f = jc([o]);
-  if (
-    f.x < d.x - v ||
-    f.y < d.y - v ||
-    f.x + f.w > d.x + d.w + v ||
-    f.y + f.h > d.y + d.h + v
-  )
-    return !1;
-  if (o.type !== "stroke") return !0;
-  const g = Yc(o),
-    b = (o.points || []).map((N) => Cm(g, N));
-  return b.length
-    ? b.every(
-        (N) =>
-          N.x >= d.x - v &&
-          N.x <= d.x + d.w + v &&
-          N.y >= d.y - v &&
-          N.y <= d.y + d.h + v,
-      )
-    : !0;
+function framiaClipSeg(a, b, r) {
+  const dx = b.x - a.x,
+    dy = b.y - a.y;
+  let t0 = 0,
+    t1 = 1;
+  const p = [-dx, dx, -dy, dy],
+    q = [a.x - r.x, r.x + r.w - a.x, a.y - r.y, r.y + r.h - a.y];
+  for (let i = 0; i < 4; i++) {
+    if (!p[i]) {
+      if (q[i] < 0) return null;
+      continue;
+    }
+    const t = q[i] / p[i];
+    if (p[i] < 0) {
+      if (t > t1) return null;
+      t > t0 && (t0 = t);
+    } else {
+      if (t < t0) return null;
+      t < t1 && (t1 = t);
+    }
+  }
+  return { t0, t1 };
+}
+function framiaMergeRuns(o) {
+  const d = [];
+  for (const v of o) {
+    const f = d[d.length - 1],
+      g = f && f[f.length - 1];
+    if (f && Math.hypot(g.x - v[0].x, g.y - v[0].y) < 0.5)
+      v.slice(1).forEach((b) => f.push(b));
+    else d.push(v.slice());
+  }
+  return d.filter((v) => v.length > 1);
+}
+function framiaSplitStroke(o, d) {
+  const v = [],
+    f = [],
+    g = (b, N, M) => ({ x: b.x + (N.x - b.x) * M, y: b.y + (N.y - b.y) * M });
+  for (let b = 1; b < o.length; b++) {
+    const N = o[b - 1],
+      M = o[b],
+      B = framiaClipSeg(N, M, d);
+    if (!B) {
+      f.push([N, M]);
+      continue;
+    }
+    B.t0 > 0 && f.push([N, g(N, M, B.t0)]);
+    v.push([g(N, M, B.t0), g(N, M, B.t1)]);
+    B.t1 < 1 && f.push([g(N, M, B.t1), M]);
+  }
+  return { inside: framiaMergeRuns(v), outside: framiaMergeRuns(f) };
+}
+function framiaFlat(o) {
+  if (o.transform) return !1;
+  const d = o.matrix;
+  return (
+    !d ||
+    (d[0] === 1 && d[1] === 0 && d[2] === 0 && d[3] === 1 && d[4] === 0 && d[5] === 0)
+  );
+}
+function framiaPiece(o, d, v) {
+  const f = xm({ ...o, points: v });
+  return {
+    ...o,
+    id: d,
+    points: v,
+    x: f.x,
+    y: f.y,
+    w: f.w,
+    h: f.h,
+    group: void 0,
+  };
 }
 function Lg4(o, d) {
   const v = jc([o]);
@@ -19687,8 +19738,60 @@ function cg() {
       if (i) {
         if (((Wt.current = null), i.type === "marquee")) {
           if (q) {
-            const s = mt.filter((h) => Lg5(h, q)).map((h) => h.id);
-            tn([...new Set([...(i.base || []), ...s])]);
+            const picked = new Set(i.base || []),
+              cut = [],
+              pieces = [];
+            for (const h of mt) {
+              if (!Lg4(h, q)) continue;
+              if (h.type !== "stroke" || !framiaFlat(h) || !(h.points || []).length) {
+                picked.add(h.id);
+                continue;
+              }
+              const parts = framiaSplitStroke(h.points, q);
+              if (!parts.inside.length || !parts.outside.length) {
+                picked.add(h.id);
+                continue;
+              }
+              cut.push({
+                id: h.id,
+                outside: parts.outside.map((pts) => framiaPiece(h, Ke(), pts)),
+              });
+              parts.inside.forEach((pts) => {
+                const frag = framiaPiece(h, Ke(), pts);
+                (pieces.push(frag), picked.add(frag.id));
+              });
+            }
+            if (cut.length) {
+              De((draft) => {
+                const frame =
+                    draft.content[ze.id] || (draft.content[ze.id] = {}),
+                  list = frame[ee] || [],
+                  removed = new Map(cut.map((c) => [c.id, c.outside]));
+                const next = [];
+                for (const el of list) {
+                  const rest = removed.get(el.id);
+                  if (!rest) {
+                    next.push(el);
+                    continue;
+                  }
+                  rest.forEach((p) => next.push(p));
+                }
+                pieces.forEach((p) => next.push(p));
+                frame[ee] = next;
+              });
+              const groups = new Set(
+                mt.filter((el) => picked.has(el.id) && el.group).map((el) => el.group),
+              );
+              mt.forEach((el) => {
+                el.group && groups.has(el.group) && picked.add(el.id);
+              });
+              const ids = [...picked],
+                box = jc([...mt.filter((el) => picked.has(el.id)), ...pieces]);
+              (Ee(ee),
+                ia(ids[0] || null),
+                B(box ? { ids, box, frameId: ze.id, layerId: ee } : null),
+                rt(box ? {} : null));
+            } else tn([...picked]);
           }
           w(null);
           return;
