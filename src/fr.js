@@ -16888,6 +16888,34 @@ function Lg3(o, d, v, f) {
     Math.sign((w.x - q.x) * (p.y - q.y) - (w.y - q.y) * (p.x - q.x));
   return g(o, d, v) !== g(o, d, f) && g(v, f, o) !== g(v, f, d);
 }
+function framiaTime(o) {
+  const d = Math.max(0, Math.floor(o || 0)),
+    v = Math.floor(d / 60),
+    f = d % 60;
+  return `${String(v).padStart(2, "0")}:${String(f).padStart(2, "0")}`;
+}
+function Lg5(o, d, v = 0.5) {
+  const f = jc([o]);
+  if (
+    f.x < d.x - v ||
+    f.y < d.y - v ||
+    f.x + f.w > d.x + d.w + v ||
+    f.y + f.h > d.y + d.h + v
+  )
+    return !1;
+  if (o.type !== "stroke") return !0;
+  const g = Yc(o),
+    b = (o.points || []).map((N) => Cm(g, N));
+  return b.length
+    ? b.every(
+        (N) =>
+          N.x >= d.x - v &&
+          N.x <= d.x + d.w + v &&
+          N.y >= d.y - v &&
+          N.y <= d.y + d.h + v,
+      )
+    : !0;
+}
 function Lg4(o, d) {
   const v = jc([o]);
   if (
@@ -17868,6 +17896,7 @@ const Ke = () => Math.random().toString(36).slice(2, 10),
     line: "l",
     rect: "r",
     ellipse: "o",
+    note: "n",
   },
   loadShortcuts = () => {
     try {
@@ -18024,6 +18053,9 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       split: "Cortar",
       onion: "Onion skin",
       chat: "Chat",
+      notes: "Anotações",
+      clearNotes: "Limpar anotações",
+      chatEmpty: "Nenhuma mensagem ainda — diga oi para quem está na sala.",
       full: "Só tela",
       theme: "Tema",
       language: "Idioma",
@@ -18101,6 +18133,9 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       split: "Split",
       onion: "Onion skin",
       chat: "Chat",
+      notes: "Annotations",
+      clearNotes: "Clear annotations",
+      chatEmpty: "No messages yet — say hi to whoever is in the room.",
       full: "Canvas only",
       theme: "Theme",
       language: "Language",
@@ -18177,6 +18212,9 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       split: "Dividir",
       onion: "Papel cebolla",
       chat: "Chat",
+      notes: "Anotaciones",
+      clearNotes: "Borrar anotaciones",
+      chatEmpty: "Todavía no hay mensajes — saluda a quien esté en la sala.",
       full: "Solo lienzo",
       theme: "Tema",
       language: "Idioma",
@@ -18596,6 +18634,8 @@ function cg() {
     [shortcuts, setShortcuts] = Y.useState(loadShortcuts),
     [renderFps, setRenderFps] = Y.useState(0),
     [ca, Cu] = Y.useState(null),
+    [noteStrokes, setNoteStrokes] = Y.useState([]),
+    [noteVisible, setNoteVisible] = Y.useState(!0),
     [_o, Za] = Y.useState([]),
     [Tt, ta] = Y.useState(null),
     [It, Oi] = Y.useState(1),
@@ -18652,6 +18692,8 @@ function cg() {
     H = A1[Me] || A1.pt,
     xt = w1[Me] || w1.pt,
     Cl = Y.useRef(null),
+    noteRef = Y.useRef(null),
+    noteDraw = Y.useRef(null),
     sa = Y.useRef(null),
     Wt = Y.useRef(null),
     fa = Y.useRef([]),
@@ -19057,7 +19099,9 @@ function cg() {
           let h = s.data;
           h.sender !== Vn.current &&
             (h.type === "chat" &&
-              (Mu((y) => [...y, h.payload]),
+              (Mu((y) =>
+                y.some((R) => R.id === h.payload.id) ? y : [...y, h.payload],
+              ),
               He(h.payload.name, h.payload.text, () => Tu(!0))),
             h.type === "reaction" && Za((y) => [...y, h.payload]),
             h.type === "transform" && ne(h.sender, h.payload));
@@ -19643,7 +19687,7 @@ function cg() {
       if (i) {
         if (((Wt.current = null), i.type === "marquee")) {
           if (q) {
-            const s = mt.filter((h) => Lg4(h, q)).map((h) => h.id);
+            const s = mt.filter((h) => Lg5(h, q)).map((h) => h.id);
             tn([...new Set([...(i.base || []), ...s])]);
           }
           w(null);
@@ -20526,6 +20570,82 @@ function cg() {
       (i !== "transform" && M && $e && Gi(),
         i !== "transform" && restoreToolSettings(i),
         i === "transform" ? Bu() : he(i));
+    },
+    readNotes = (i) => {
+      try {
+        const s = JSON.parse(localStorage.getItem(`framia-notes-${i}`) || "[]");
+        return Array.isArray(s)
+          ? s
+              .filter((h) => h && Array.isArray(h.points))
+              .map((h) => ({
+                color: typeof h.color == "string" ? h.color : "#ff4d6d",
+                size: Number(h.size) || 7,
+                points: h.points.filter(
+                  (y) => y && Number.isFinite(y.x) && Number.isFinite(y.y),
+                ),
+              }))
+              .filter((h) => h.points.length > 0)
+          : [];
+      } catch {
+        return [];
+      }
+    },
+    writeNotes = (i, s) => {
+      try {
+        localStorage.setItem(`framia-notes-${i}`, JSON.stringify(s));
+      } catch {}
+    },
+    paintNotes = () => {
+      const i = noteRef.current;
+      if (!i) return;
+      const s = Math.max(1, Math.round((Math.min(1e3, z.width) * xe) / 100)),
+        h = Math.max(1, Math.round((s / z.width) * z.height));
+      (i.width !== s || i.height !== h) && ((i.width = s), (i.height = h));
+      const y = i.getContext("2d");
+      if (!y) return;
+      if ((y.clearRect(0, 0, s, h), !noteVisible)) return;
+      ((y.lineCap = "round"),
+        (y.lineJoin = "round"),
+        noteStrokes.forEach((R) => {
+          const U = R.points || [];
+          if (!U.length) return;
+          ((y.strokeStyle = R.color || "#ff4d6d"),
+            (y.lineWidth = Math.max(1.5, (R.size || 7) * (s / z.width))),
+            y.beginPath(),
+            U.forEach((X, $) => {
+              const se = (X.x / z.width) * s,
+                be = (X.y / z.height) * h;
+              $ ? y.lineTo(se, be) : y.moveTo(se, be);
+            }),
+            U.length === 1 &&
+              y.lineTo((U[0].x / z.width) * s + 0.01, (U[0].y / z.height) * h),
+            y.stroke());
+        }));
+    },
+    clearNotes = () => {
+      (setNoteStrokes([]), writeNotes(z.id, []));
+    },
+    notePointerDown = (i) => {
+      if (pe !== "note" || !noteVisible || i.button !== 0) return;
+      (i.preventDefault(), i.currentTarget.setPointerCapture(i.pointerId));
+      const s = en(i);
+      noteDraw.current = { color: "#ff4d6d", size: 7, points: [s] };
+      setNoteStrokes((h) => [...h, noteDraw.current]);
+    },
+    notePointerMove = (i) => {
+      const s = noteDraw.current;
+      if (!s) return;
+      const h = en(i),
+        y = s.points.at(-1);
+      if (y && Math.hypot(h.x - y.x, h.y - y.y) < 1.5) return;
+      (s.points.push(h),
+        setNoteStrokes((R) => {
+          const U = R.slice();
+          return ((U[U.length - 1] = { ...s, points: [...s.points] }), U);
+        }));
+    },
+    notePointerUp = () => {
+      noteDraw.current = null;
     },
     Kn = () => {
       if (!M) return;
@@ -21514,6 +21634,10 @@ function cg() {
         Qi.indexOf(i.group) - Qi.indexOf(s.group) ||
         i.name.localeCompare(s.name),
     ),
+    NoteIcon = de("PenLine", [
+      ["path", { d: "M12 20h9", key: "note-a" }],
+      ["path", { d: "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z", key: "note-b" }],
+    ]),
     Lu = [
       [Cp, "transform", H.transform, "T"],
       [um, "brush", H.brush, "B"],
@@ -21559,9 +21683,11 @@ function cg() {
         "R",
       ],
       [yp, "ellipse", Me === "en" ? "Ellipse" : "Elipse", "O"],
+      [NoteIcon, "note", H.notes, "N"],
     ],
     ma = 62 * It,
     _a = ma * z.fps,
+    rulerStep = Math.max(1, Math.ceil(6 / ma)),
     nn =
       Math.max(
         Hn(z.frames),
@@ -21658,6 +21784,15 @@ function cg() {
       }
       ke(i);
     };
+  Y.useEffect(() => {
+    (setNoteStrokes(readNotes(z.id)), (noteDraw.current = null));
+  }, [z.id]);
+  Y.useEffect(() => {
+    paintNotes();
+  }, [noteStrokes, noteVisible, xe, z.width, z.height]);
+  Y.useEffect(() => {
+    writeNotes(z.id, noteStrokes);
+  }, [noteStrokes]);
   Y.useEffect(() => {
     const canvas = sa.current;
     const ruler = Wl.current;
@@ -22516,6 +22651,28 @@ function cg() {
                   },
                   r.createElement(sm, { size: 14 }),
                 ),
+                r.createElement(
+                  "button",
+                  {
+                    className: `mini-toggle ${noteVisible ? "on" : ""}`,
+                    title: H.notes,
+                    "aria-pressed": noteVisible,
+                    onClick: () => setNoteVisible((i) => !i),
+                  },
+                  r.createElement(NoteIcon, { size: 14 }),
+                  H.notes,
+                ),
+                noteStrokes.length > 0 &&
+                  r.createElement(
+                    "button",
+                    {
+                      className: "mini-icon",
+                      title: H.clearNotes,
+                      "aria-label": H.clearNotes,
+                      onClick: clearNotes,
+                    },
+                    r.createElement(Hc, { size: 14 }),
+                  ),
                 r.createElement("span", { className: "toolbar-sep" }),
                 r.createElement(
                   "button",
@@ -22695,6 +22852,14 @@ function cg() {
                   onPointerMove: $a,
                   onPointerUp: an,
                   onPointerCancel: an,
+                }),
+                r.createElement("canvas", {
+                  ref: noteRef,
+                  className: `annotation-canvas${pe === "note" ? " drawing" : ""}${noteVisible ? "" : " hidden"}`,
+                  onPointerDown: notePointerDown,
+                  onPointerMove: notePointerMove,
+                  onPointerUp: notePointerUp,
+                  onPointerCancel: notePointerUp,
                 }),
                 fpsOpen &&
                   r.createElement(
@@ -23611,17 +23776,34 @@ function cg() {
                 "div",
                 {
                   className: "ruler-inner",
-                  style: { width: nn * ma, backgroundSize: `${ma}px 100%` },
+                  style: { width: nn * ma },
                 },
                 Array.from(
-                  { length: Math.min(1e3, Math.ceil(nn / z.fps) + 1) },
+                  { length: Math.min(900, Math.ceil(nn / z.fps) + 1) },
                   (i, s) =>
                     r.createElement(
-                      "span",
-                      { key: s, style: { left: s * _a + 5 } },
-                      s,
-                      "s",
+                      "div",
+                      {
+                        key: `s${s}`,
+                        className: "ruler-mark",
+                        style: { left: s * _a },
+                      },
+                      r.createElement("i", null),
+                      r.createElement("span", null, framiaTime(s)),
                     ),
+                ),
+                Array.from(
+                  { length: Math.min(2000, Math.floor(nn / rulerStep) + 1) },
+                  (i, s) => {
+                    const h = s * rulerStep;
+                    return h % z.fps === 0
+                      ? null
+                      : r.createElement("i", {
+                          key: `f${h}`,
+                          className: "ruler-mini",
+                          style: { left: h * ma },
+                        });
+                  },
                 ),
               ),
             ),
@@ -23693,7 +23875,7 @@ function cg() {
                 r.createElement(
                   "div",
                   { className: "timeline-hover", style: { left: Et * ma } },
-                  r.createElement("span", null, (Et / z.fps).toFixed(2), "s"),
+                  r.createElement("span", null, framiaTime(Et / z.fps)),
                 ),
               r.createElement(
                 "div",
@@ -24031,7 +24213,7 @@ function cg() {
                     { className: "empty-chat" },
                     r.createElement(cm, { size: 28 }),
                     r.createElement("b", null, H.chat),
-                    r.createElement("p", null, H.notAvailable),
+                    r.createElement("p", null, H.chatEmpty),
                   )
                 : Nu.map((i) =>
                     r.createElement(
