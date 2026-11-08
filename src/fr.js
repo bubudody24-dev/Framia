@@ -16894,20 +16894,35 @@ function framiaTime(o) {
     f = d % 60;
   return `${String(v).padStart(2, "0")}:${String(f).padStart(2, "0")}`;
 }
-function framiaClipSeg(a, b, r) {
+function framiaQuad(o, r) {
+  const d = G1(Yc(o));
+  return d ? bm(r, d) : null;
+}
+function framiaClipSeg(a, b, poly) {
   const dx = b.x - a.x,
     dy = b.y - a.y;
   let t0 = 0,
-    t1 = 1;
-  const p = [-dx, dx, -dy, dy],
-    q = [a.x - r.x, r.x + r.w - a.x, a.y - r.y, r.y + r.h - a.y];
-  for (let i = 0; i < 4; i++) {
-    if (!p[i]) {
-      if (q[i] < 0) return null;
+    t1 = 1,
+    area = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i],
+      q = poly[(i + 1) % poly.length];
+    area += p.x * q.y - q.x * p.y;
+  }
+  const sgn = area < 0 ? -1 : 1;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i],
+      q = poly[(i + 1) % poly.length],
+      nx = -(q.y - p.y) * sgn,
+      ny = (q.x - p.x) * sgn,
+      A = (a.x - p.x) * nx + (a.y - p.y) * ny,
+      D = dx * nx + dy * ny;
+    if (Math.abs(D) < 1e-9) {
+      if (A < 0) return null;
       continue;
     }
-    const t = q[i] / p[i];
-    if (p[i] < 0) {
+    const t = -A / D;
+    if (D > 0) {
       if (t > t1) return null;
       t > t0 && (t0 = t);
     } else {
@@ -16928,14 +16943,14 @@ function framiaMergeRuns(o) {
   }
   return d.filter((v) => v.length > 1);
 }
-function framiaSplitStroke(o, d) {
+function framiaSplitStroke(o, poly) {
   const v = [],
     f = [],
     g = (b, N, M) => ({ x: b.x + (N.x - b.x) * M, y: b.y + (N.y - b.y) * M });
   for (let b = 1; b < o.length; b++) {
     const N = o[b - 1],
       M = o[b],
-      B = framiaClipSeg(N, M, d);
+      B = framiaClipSeg(N, M, poly);
     if (!B) {
       f.push([N, M]);
       continue;
@@ -16946,18 +16961,11 @@ function framiaSplitStroke(o, d) {
   }
   return { inside: framiaMergeRuns(v), outside: framiaMergeRuns(f) };
 }
-function framiaFlat(o) {
-  if (o.transform) return !1;
-  const d = o.matrix;
-  return (
-    !d ||
-    (d[0] === 1 && d[1] === 0 && d[2] === 0 && d[3] === 1 && d[4] === 0 && d[5] === 0)
-  );
-}
 function framiaPiece(o, d, v) {
-  const f = xm({ ...o, points: v });
+  const f = xm({ ...o, points: v }),
+    { transform, ...rest } = o;
   return {
-    ...o,
+    ...rest,
     id: d,
     points: v,
     x: f.x,
@@ -16965,6 +16973,7 @@ function framiaPiece(o, d, v) {
     w: f.w,
     h: f.h,
     group: void 0,
+    matrix: [...Yc(o)],
   };
 }
 function Lg4(o, d) {
@@ -19743,11 +19752,15 @@ function cg() {
               pieces = [];
             for (const h of mt) {
               if (!Lg4(h, q)) continue;
-              if (h.type !== "stroke" || !framiaFlat(h) || !(h.points || []).length) {
+              const poly =
+                h.type === "stroke" && (h.points || []).length
+                  ? framiaQuad(h, q)
+                  : null;
+              if (!poly) {
                 picked.add(h.id);
                 continue;
               }
-              const parts = framiaSplitStroke(h.points, q);
+              const parts = framiaSplitStroke(h.points, poly);
               if (!parts.inside.length || !parts.outside.length) {
                 picked.add(h.id);
                 continue;
@@ -23353,8 +23366,8 @@ function cg() {
                           "p",
                           { className: "transform-hint" },
                           Me === "en"
-                            ? "Click a stroke or drag a box to select. Shift-click adds or removes. Ctrl+G groups, Ctrl+Shift+G ungroups. Enter applies the transform, Esc cancels."
-                            : "Clique em um traço ou arraste uma caixa para selecionar. Shift soma ou tira da seleção. Ctrl+G agrupa, Ctrl+Shift+G desagrupa. Enter aplica, Esc cancela.",
+                            ? "Click a stroke to take it whole; drag a box to take and cut whatever it covers. Shift-click adds or removes. Ctrl+G groups, Ctrl+Shift+G ungroups. Enter applies the transform, Esc cancels."
+                            : "Clique em um traço pega ele inteiro; arraste uma caixa para pegar e recortar o que ela cobre. Shift soma ou tira da seleção. Ctrl+G agrupa, Ctrl+Shift+G desagrupa. Enter aplica, Esc cancela.",
                         ),
                         r.createElement(
                           "button",
