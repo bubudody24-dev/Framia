@@ -16791,7 +16791,7 @@ function G1(o) {
       ];
 }
 function xm(o) {
-  if (o.type === "image" || o.type === "shape")
+  if (o.type === "image" || o.type === "shape" || o.type === "text")
     return { x: o.x, y: o.y, w: Math.max(1, o.w), h: Math.max(1, o.h) };
   const d = o.points || [];
   if (!d.length) return { x: 0, y: 0, w: 1, h: 1 };
@@ -16887,6 +16887,120 @@ function Lg3(o, d, v, f) {
   const g = (q, w, p) =>
     Math.sign((w.x - q.x) * (p.y - q.y) - (w.y - q.y) * (p.x - q.x));
   return g(o, d, v) !== g(o, d, f) && g(v, f, o) !== g(v, f, d);
+}
+const FRAMIA_FONT_KEY = "framia-fonts",
+  FRAMIA_FONT_BASE = [
+    "Manrope",
+    "DM Sans",
+    "Inter",
+    "Space Grotesk",
+    "Poppins",
+    "Montserrat",
+    "Playfair Display",
+    "Bebas Neue",
+    "Oswald",
+    "Anton",
+    "Caveat",
+    "Lora",
+  ];
+const FRAMIA_FONT_LOCAL = ["Manrope", "DM Sans"];
+let framiaTextCtx = null;
+function framiaFontString(o) {
+  return `${o.italic ? "italic " : ""}${o.weight || 700} ${o.size || 64}px "${o.font || "Manrope"}", Manrope, sans-serif`;
+}
+function framiaTextMetrics(o) {
+  framiaTextCtx ||
+    (framiaTextCtx = document.createElement("canvas").getContext("2d"));
+  framiaTextCtx.font = framiaFontString(o);
+  const d = String(o.text ?? "").split("\n"),
+    v = Math.max(1, d.length) * (o.size || 64) * 1.18;
+  let f = 1;
+  for (const g of d) f = Math.max(f, framiaTextCtx.measureText(g || " ").width);
+  return { w: Math.ceil(f), h: Math.ceil(v) };
+}
+function framiaTextHex(o) {
+  const d = String(o || "").trim();
+  if (/^#[0-9a-f]{6}$/i.test(d)) return d.toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(d))
+    return (
+      "#" +
+      d
+        .slice(1)
+        .split("")
+        .map((v) => v + v)
+        .join("")
+    ).toLowerCase();
+  return "#222222";
+}
+function framiaTextElement(o) {
+  const d = {
+      type: "text",
+      text: "Texto",
+      font: "Manrope",
+      size: 64,
+      weight: 700,
+      italic: !1,
+      color: "#222222",
+      opacity: 1,
+      ...o,
+    },
+    v = framiaTextMetrics(d);
+  d.color = framiaTextHex(d.color);
+  return { id: Ke(), ...d, w: v.w, h: v.h };
+}
+function framiaInstalledFonts() {
+  try {
+    const o = JSON.parse(localStorage.getItem(FRAMIA_FONT_KEY) || "[]");
+    return Array.isArray(o) ? o.filter((d) => typeof d === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function framiaRememberFont(o) {
+  const d = [...new Set([...framiaInstalledFonts(), o])];
+  try {
+    localStorage.setItem(FRAMIA_FONT_KEY, JSON.stringify(d));
+  } catch {}
+  return d;
+}
+function framiaLoadFont(o) {
+  return new Promise((d) => {
+    const v = String(o || "").trim();
+    if (!v) return d(!1);
+    const id = "framia-font-" + v.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      family = v.replace(/["']/g, "").trim(),
+      pick = () =>
+        [...document.fonts].filter(
+          (face) =>
+            String(face.family).replace(/["']/g, "").trim().toLowerCase() ===
+            family.toLowerCase(),
+        ),
+      startedAt = Date.now(),
+      done = async () => {
+        const faces = pick();
+        if (!faces.length)
+          return Date.now() - startedAt > 5e3
+            ? d(!1)
+            : void setTimeout(done, 130);
+        await Promise.all(faces.map((face) => face.load().catch(() => null)));
+        faces.some((face) => face.status === "loaded")
+          ? d(!0)
+          : Date.now() - startedAt > 5e3
+            ? d(!1)
+            : void setTimeout(done, 130);
+      };
+    if (FRAMIA_FONT_LOCAL.some((face) => face.toLowerCase() === family.toLowerCase()))
+      return void document.fonts.ready.then(() => d(!0));
+    if (!document.getElementById(id)) {
+      const link = document.createElement("link");
+      ((link.id = id),
+        (link.rel = "stylesheet"),
+        (link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@400;600;700;800&display=swap`),
+        link.addEventListener("error", () => d(!1), { once: !0 }),
+        document.head.appendChild(link));
+    }
+    done();
+  });
 }
 function framiaTime(o) {
   const d = Math.max(0, Math.floor(o || 0)),
@@ -18559,9 +18673,8 @@ function Eu(o, d, v) {
         for (let g = 1; g < f.length; g++) o.lineTo(f[g].x, f[g].y);
         o.stroke();
       }
-  } else
-    d.type === "shape" &&
-      ((o.strokeStyle = d.color),
+  } else if (d.type === "shape")
+    ((o.strokeStyle = d.color),
       (o.lineWidth = d.size || 4),
       o.beginPath(),
       d.shape === "rect"
@@ -18581,6 +18694,25 @@ function Eu(o, d, v) {
               o.lineTo(d.points[1].x, d.points[1].y))
             : (o.moveTo(d.x, d.y), o.lineTo(d.x + d.w, d.y + d.h)),
       o.stroke());
+  else if (d.type === "text") {
+    const fSize = d.size || 64,
+      fLines = String(d.text ?? "").split("\n"),
+      fLineH = fSize * 1.18,
+      fAlign =
+        d.align === "center"
+          ? "center"
+          : d.align === "right"
+            ? "right"
+            : "left";
+    ((o.font = framiaFontString(d)),
+      (o.fillStyle = d.color || "#222222"),
+      (o.textBaseline = "top"),
+      (o.textAlign = fAlign));
+    const fOffset =
+      fAlign === "center" ? (d.w || 0) / 2 : fAlign === "right" ? d.w || 0 : 0;
+    for (let fLine = 0; fLine < fLines.length; fLine++)
+      o.fillText(fLines[fLine], d.x + fOffset, d.y + fLine * fLineH);
+  }
   o.restore();
 }
 function O1(o, d, v, f) {
@@ -18722,6 +18854,10 @@ function cg() {
     [K, F] = Y.useState(0),
     [ee, Ee] = Y.useState(z.layers[0].id),
     [pe, he] = Y.useState("brush"),
+    [textId, setTextId] = Y.useState(null),
+    [fonts, setFonts] = Y.useState(framiaInstalledFonts),
+    [fontName, setFontName] = Y.useState(""),
+    [fontMsg, setFontMsg] = Y.useState(""),
     [ct, Fe] = Y.useState("#22242b"),
     [Ae, J] = Y.useState(() => framiaToolSettings().brush.size),
     [re, ye] = Y.useState(() => framiaToolSettings().brush.opacity),
@@ -18937,6 +19073,13 @@ function cg() {
     ),
     [],
   ),
+    Y.useEffect(() => {
+      const list = framiaInstalledFonts();
+      if (!list.length) return;
+      Promise.all(list.map((i) => framiaLoadFont(i))).then(() => {
+        te((i) => ({ ...i, revision: ++Gn.current }));
+      });
+    }, []),
     Y.useEffect(() => {
       for (const i of z.clips) {
         const s = Ja.current.get(i.id);
@@ -19613,6 +19756,27 @@ function cg() {
         return;
       }
       if (Ue.locked || !Ue.visible) return;
+      if (pe === "text") {
+        const hitEl = [...mt].reverse().find((R) => R.type === "text" && Vp(R, s, 6));
+        if (hitEl) return (tn([hitEl.id]), void setTextId(hitEl.id));
+        const newEl = framiaTextElement({
+          x: Math.round(s.x),
+          y: Math.round(s.y),
+          color: ct,
+        });
+        (rl(ze.id, ee, [newEl]),
+          Ee(ee),
+          ia(newEl.id),
+          B({
+            ids: [newEl.id],
+            box: jc([newEl]),
+            frameId: ze.id,
+            layerId: ee,
+          }),
+          rt({}),
+          setTextId(newEl.id));
+        return;
+      }
       if (pe === "pipette") {
         let y = Cl.current
           .getContext("2d")
@@ -21733,7 +21897,7 @@ function cg() {
             (y.preventDefault(), F(Math.max(0, (Hn(z.frames) - 1) / z.fps))),
           (() => {
             const $ = y.key.toLowerCase();
-            if ($ === "t") return selectTool("transform");
+            if ($ === "t") return selectTool("text");
             const se = Object.keys(shortcuts).find((be) => shortcuts[be] === $);
             se && selectTool(se);
           })(),
@@ -21828,12 +21992,23 @@ function cg() {
         Qi.indexOf(i.group) - Qi.indexOf(s.group) ||
         i.name.localeCompare(s.name),
     ),
+    TextIcon = de("Type", [
+      ["path", { d: "M4 7V4h16v3", key: "type-a" }],
+      ["path", { d: "M9 20h6", key: "type-b" }],
+      ["path", { d: "M12 4v16", key: "type-c" }],
+    ]),
     NoteIcon = de("PenLine", [
       ["path", { d: "M12 20h9", key: "note-a" }],
       ["path", { d: "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z", key: "note-b" }],
     ]),
     Lu = [
-      [Cp, "transform", H.transform, "T"],
+      [Cp, "transform", H.transform, "V"],
+      [
+        xp,
+        "pan",
+        Me === "en" ? "Pan" : Me === "es" ? "Mover lienzo" : "Mover tela",
+        "H",
+      ],
       [um, "brush", H.brush, "B"],
       [
         pp,
@@ -21854,12 +22029,6 @@ function cg() {
         "G",
       ],
       [
-        xp,
-        "pan",
-        Me === "en" ? "Pan" : Me === "es" ? "Mover lienzo" : "Mover tela",
-        "H",
-      ],
-      [
         Rp,
         "pipette",
         Me === "en"
@@ -21877,7 +22046,19 @@ function cg() {
         "R",
       ],
       [yp, "ellipse", Me === "en" ? "Ellipse" : "Elipse", "O"],
+      [
+        TextIcon,
+        "text",
+        Me === "en" ? "Text" : Me === "es" ? "Texto" : "Texto",
+        "T",
+      ],
       [NoteIcon, "note", H.notes, "N"],
+    ],
+    railGroups = [
+      ["transform", "pan"],
+      ["brush", "eraser", "smudge", "fill", "pipette"],
+      ["line", "rect", "ellipse", "text"],
+      ["note"],
     ],
     ma = 62 * It,
     _a = ma * z.fps,
@@ -22744,25 +22925,36 @@ function cg() {
           r.createElement(
             "nav",
             { className: "toolrail" },
-            r.createElement(
-              "div",
-              { className: "rail-group" },
-              Lu.map(([i, s, h, y]) =>
-                r.createElement(
-                  "button",
-                  {
-                    key: s,
-                    className: `tool ${pe === s ? "active" : ""}`,
-                    title: `${h} (${(shortcuts[s] || y).toUpperCase()})`,
-                    onClick: () => selectTool(s),
-                  },
-                  r.createElement(i, { size: 18, strokeWidth: 1.8 }),
-                  r.createElement(
-                    "kbd",
-                    null,
-                    (shortcuts[s] || y).toUpperCase(),
-                  ),
-                ),
+            railGroups.map((group, gi) =>
+              r.createElement(
+                "div",
+                { className: "rail-group", key: `rail-${gi}` },
+                gi > 0 &&
+                  r.createElement("span", {
+                    className: "rail-divider",
+                    "aria-hidden": "true",
+                  }),
+                group.map((id) => {
+                  const entry = Lu.find((i) => i[1] === id) || [];
+                  const [Icon, slug, label, key] = entry;
+                  return r.createElement(
+                    "button",
+                    {
+                      key: id,
+                      className: `tool ${pe === id ? "active" : ""}`,
+                      title: `${label} (${(shortcuts[id] || key).toUpperCase()})`,
+                      "aria-label": label,
+                      "aria-pressed": pe === id,
+                      onClick: () => selectTool(id),
+                    },
+                    r.createElement(Icon, { size: 18, strokeWidth: 1.8 }),
+                    r.createElement(
+                      "kbd",
+                      null,
+                      (shortcuts[slug] || key).toUpperCase(),
+                    ),
+                  );
+                }),
               ),
             ),
             r.createElement("div", { className: "rail-spacer" }),
@@ -22846,56 +23038,6 @@ function cg() {
                   },
                   r.createElement(sm, { size: 14 }),
                 ),
-                r.createElement(
-                  "button",
-                  {
-                    className: `mini-toggle ${pe === "note" ? "on" : ""}`,
-                    title: H.notes,
-                    "aria-pressed": pe === "note",
-                    onClick: () => {
-                      if (pe === "note") return he("brush");
-                      (setNoteVisible(!0), he("note"));
-                    },
-                  },
-                  r.createElement(NoteIcon, { size: 14 }),
-                  H.notes,
-                ),
-                noteStrokes.length > 0 &&
-                  r.createElement(
-                    "button",
-                    {
-                      className: "mini-icon",
-                      title: noteVisible
-                        ? Me === "en"
-                          ? "Hide annotations"
-                          : Me === "es"
-                            ? "Ocultar anotaciones"
-                            : "Ocultar anotações"
-                        : Me === "en"
-                          ? "Show annotations"
-                          : Me === "es"
-                            ? "Mostrar anotaciones"
-                            : "Mostrar anotações",
-                      "aria-label": noteVisible
-                        ? "Ocultar anotações"
-                        : "Mostrar anotações",
-                      onClick: () => setNoteVisible((i) => !i),
-                    },
-                    noteVisible
-                      ? r.createElement(Ep, { size: 14 })
-                      : r.createElement(gp, { size: 14 }),
-                  ),
-                noteStrokes.length > 0 &&
-                  r.createElement(
-                    "button",
-                    {
-                      className: "mini-icon",
-                      title: H.clearNotes,
-                      "aria-label": H.clearNotes,
-                      onClick: clearNotes,
-                    },
-                    r.createElement(Hc, { size: 14 }),
-                  ),
                 r.createElement(
                   "div",
                   { className: "layers-anchor" },
@@ -23102,6 +23244,56 @@ function cg() {
                 r.createElement(
                   "button",
                   {
+                    className: `mini-toggle ${pe === "note" ? "on" : ""}`,
+                    title: H.notes,
+                    "aria-pressed": pe === "note",
+                    onClick: () => {
+                      if (pe === "note") return he("brush");
+                      (setNoteVisible(!0), he("note"));
+                    },
+                  },
+                  r.createElement(NoteIcon, { size: 14 }),
+                  H.notes,
+                ),
+                noteStrokes.length > 0 &&
+                  r.createElement(
+                    "button",
+                    {
+                      className: "mini-icon",
+                      title: noteVisible
+                        ? Me === "en"
+                          ? "Hide annotations"
+                          : Me === "es"
+                            ? "Ocultar anotaciones"
+                            : "Ocultar anotações"
+                        : Me === "en"
+                          ? "Show annotations"
+                          : Me === "es"
+                            ? "Mostrar anotaciones"
+                            : "Mostrar anotações",
+                      "aria-label": noteVisible
+                        ? "Ocultar anotações"
+                        : "Mostrar anotações",
+                      onClick: () => setNoteVisible((i) => !i),
+                    },
+                    noteVisible
+                      ? r.createElement(Ep, { size: 14 })
+                      : r.createElement(gp, { size: 14 }),
+                  ),
+                noteStrokes.length > 0 &&
+                  r.createElement(
+                    "button",
+                    {
+                      className: "mini-icon",
+                      title: H.clearNotes,
+                      "aria-label": H.clearNotes,
+                      onClick: clearNotes,
+                    },
+                    r.createElement(Hc, { size: 14 }),
+                  ),
+                r.createElement(
+                  "button",
+                  {
                     className: "mini-icon",
                     title: H.full + " (Tab)",
                     onClick: () => Ft((i) => !i),
@@ -23110,6 +23302,202 @@ function cg() {
                 ),
               ),
             ),
+            (() => {
+              const textEl = textId ? mt.find((i) => i.id === textId) : null;
+              if (!textEl) return null;
+              const patchText = (patch) => {
+                const nextEl = { ...textEl, ...patch };
+                if (
+                  "text" in patch ||
+                  "size" in patch ||
+                  "font" in patch ||
+                  "weight" in patch ||
+                  "italic" in patch
+                ) {
+                  const m = framiaTextMetrics(nextEl);
+                  ((nextEl.w = m.w), (nextEl.h = m.h));
+                }
+                te((i) => {
+                  const s2 = i.content[ze.id] || {},
+                    h = s2[ee] || [];
+                  return {
+                    ...i,
+                    revision: ++Gn.current,
+                    content: {
+                      ...i.content,
+                      [ze.id]: {
+                        ...s2,
+                        [ee]: h.map((y) =>
+                          y.id === textEl.id ? { ...y, ...nextEl } : y,
+                        ),
+                      },
+                    },
+                  };
+                });
+                B({
+                  ids: [textEl.id],
+                  box: jc([nextEl]),
+                  frameId: ze.id,
+                  layerId: ee,
+                });
+              };
+              const loadFamily = async (family) => {
+                patchText({ font: family });
+                setFontMsg(`Carregando ${family}…`);
+                const ok = await framiaLoadFont(family);
+                ok
+                  ? (setFonts(framiaRememberFont(family)),
+                    patchText({ font: family, size: textEl.size }),
+                    setFontMsg(""),
+                    te((i) => ({ ...i, revision: ++Gn.current })))
+                  : setFontMsg("Não consegui carregar essa fonte.");
+              };
+              const installFont = async () => {
+                const name = fontName.trim();
+                if (!name) return;
+                setFontMsg(`Instalando "${name}"…`);
+                const ok = await framiaLoadFont(name);
+                if (!ok) return setFontMsg("Fonte não encontrada no Google Fonts.");
+                (setFonts(framiaRememberFont(name)),
+                  setFontName(""),
+                  setFontMsg(`"${name}" instalada`),
+                  patchText({ font: name, size: textEl.size }),
+                  te((i) => ({ ...i, revision: ++Gn.current })));
+              };
+              const familyOptions = [...new Set([...FRAMIA_FONT_BASE, ...fonts, textEl.font])];
+              return r.createElement(
+                "div",
+                { className: "text-panel" },
+                r.createElement(
+                  "header",
+                  null,
+                  r.createElement(
+                    "span",
+                    null,
+                    Me === "en" ? "Text" : Me === "es" ? "Texto" : "Texto",
+                  ),
+                  r.createElement(
+                    "button",
+                    {
+                      className: "plain-icon",
+                      title: "Fechar",
+                      onClick: () => setTextId(null),
+                    },
+                    r.createElement(Hc, { size: 14 }),
+                  ),
+                ),
+                r.createElement("textarea", {
+                  value: textEl.text,
+                  rows: 2,
+                  spellCheck: false,
+                  placeholder:
+                    Me === "en"
+                      ? "Type something"
+                      : Me === "es"
+                        ? "Escribe algo"
+                        : "Digite seu texto",
+                  onChange: (i) => patchText({ text: i.currentTarget.value }),
+                }),
+                r.createElement(
+                  "div",
+                  { className: "text-row" },
+                  r.createElement(
+                    "select",
+                    {
+                      value: textEl.font,
+                      title: "Fonte",
+                      onChange: (i) => loadFamily(i.currentTarget.value),
+                    },
+                    familyOptions.map((i) =>
+                      r.createElement("option", { key: i, value: i }, i),
+                    ),
+                  ),
+                  r.createElement("input", {
+                    type: "color",
+                    value: textEl.color,
+                    title: "Cor do texto",
+                    onChange: (i) => patchText({ color: i.currentTarget.value }),
+                  }),
+                ),
+                r.createElement(
+                  "div",
+                  { className: "text-row" },
+                  r.createElement(
+                    "label",
+                    { className: "text-num" },
+                    "Tam.",
+                    r.createElement("input", {
+                      type: "number",
+                      min: 8,
+                      max: 720,
+                      step: 1,
+                      value: textEl.size,
+                      onChange: (i) =>
+                        patchText({
+                          size: Rt(Number(i.currentTarget.value) || 64, 8, 720),
+                        }),
+                    }),
+                  ),
+                  r.createElement(
+                    "select",
+                    {
+                      value: textEl.weight,
+                      title: "Peso",
+                      onChange: (i) =>
+                        patchText({ weight: Number(i.currentTarget.value) }),
+                    },
+                    [400, 600, 700, 800].map((i) =>
+                      r.createElement("option", { key: i, value: i }, i),
+                    ),
+                  ),
+                  r.createElement(
+                    "button",
+                    {
+                      className: `text-style ${textEl.italic ? "on" : ""}`,
+                      title: "Itálico",
+                      onClick: () => patchText({ italic: !textEl.italic }),
+                    },
+                    "i",
+                  ),
+                ),
+                r.createElement(
+                  "div",
+                  { className: "text-install" },
+                  r.createElement("input", {
+                    type: "text",
+                    value: fontName,
+                    placeholder:
+                      Me === "en"
+                        ? "Install font from Google Fonts"
+                        : "Instalar fonte do Google Fonts",
+                    onChange: (i) => setFontName(i.currentTarget.value),
+                    onKeyDown: (i) => {
+                      i.key === "Enter" && installFont();
+                    },
+                  }),
+                  r.createElement(
+                    "button",
+                    { className: "text-apply", onClick: installFont },
+                    "＋",
+                  ),
+                ),
+                fontMsg && r.createElement("small", { className: "text-msg" }, fontMsg),
+                r.createElement(
+                  "button",
+                  {
+                    className: "text-delete",
+                    onClick: () => {
+                      (removeSelection(), setTextId(null));
+                    },
+                  },
+                  Me === "en"
+                    ? "Delete text"
+                    : Me === "es"
+                      ? "Eliminar texto"
+                      : "Excluir texto",
+                ),
+              );
+            })(),
             r.createElement(
               "div",
               {
