@@ -17557,6 +17557,53 @@ function Wp(o, d, v, f, g, b, N = 1) {
           (V[d4 + 3] = te));
       }
   }
+  const soft = (idx) => {
+      const d4 = idx * 4;
+      return (
+        Math.abs(p[d4] - Z[0]) +
+          Math.abs(p[d4 + 1] - Z[1]) +
+          Math.abs(p[d4 + 2] - Z[2]) +
+          Math.abs(p[d4 + 3] - Z[3]) <=
+        200
+      );
+    },
+    paint = (idx) => {
+      k[idx] = 1;
+      const d4 = idx * 4;
+      ((V[d4] = oe),
+        (V[d4 + 1] = ne),
+        (V[d4 + 2] = z),
+        (V[d4 + 3] = te));
+    };
+  let frontier = [];
+  for (let idx = 0; idx < k.length; idx++)
+    if (k[idx]) {
+      const yy = (idx / M) | 0,
+        xx = idx % M;
+      if (
+        (yy > 0 && !k[idx - M] && soft(idx - M)) ||
+        (yy < B - 1 && !k[idx + M] && soft(idx + M)) ||
+        (xx > 0 && !k[idx - 1] && soft(idx - 1)) ||
+        (xx < M - 1 && !k[idx + 1] && soft(idx + 1))
+      )
+        frontier.push(idx);
+    }
+  for (let pass = 0; pass < 32 && frontier.length; pass++) {
+    const next = [];
+    for (const idx of frontier) {
+      const yy = (idx / M) | 0,
+        xx = idx % M;
+      if (yy > 0 && !k[idx - M] && soft(idx - M))
+        (paint(idx - M), next.push(idx - M));
+      if (yy < B - 1 && !k[idx + M] && soft(idx + M))
+        (paint(idx + M), next.push(idx + M));
+      if (xx > 0 && !k[idx - 1] && soft(idx - 1))
+        (paint(idx - 1), next.push(idx - 1));
+      if (xx < M - 1 && !k[idx + 1] && soft(idx + 1))
+        (paint(idx + 1), next.push(idx + 1));
+    }
+    frontier = next;
+  }
   const F = document.createElement("canvas");
   return (
     (F.width = M),
