@@ -17533,6 +17533,30 @@ function Wp(o, d, v, f, g, b, N = 1) {
     }
   }
   if (!K) return null;
+  for (let pass = 0; pass < 2; pass++) {
+    const cur = k.slice();
+    for (let yy = 0; yy < B; yy++)
+      for (let xx = 0; xx < M; xx++) {
+        const idx = yy * M + xx;
+        if (cur[idx]) continue;
+        const up = yy > 0 && cur[idx - M],
+          dn = yy < B - 1 && cur[idx + M],
+          lf = xx > 0 && cur[idx - 1],
+          rt = xx < M - 1 && cur[idx + 1];
+        if (!(up || dn || lf || rt)) continue;
+        const d4 = idx * 4,
+          gap =
+            Math.abs(p[d4] - Z[0]) +
+            Math.abs(p[d4 + 1] - Z[1]) +
+            Math.abs(p[d4 + 2] - Z[2]);
+        if (p[d4 + 3] > 210 && gap > 240) continue;
+        ((k[idx] = 1),
+          (V[d4] = oe),
+          (V[d4 + 1] = ne),
+          (V[d4 + 2] = z),
+          (V[d4 + 3] = te));
+      }
+  }
   const F = document.createElement("canvas");
   return (
     (F.width = M),
@@ -22778,14 +22802,42 @@ function cg() {
                 r.createElement(
                   "button",
                   {
-                    className: `mini-toggle ${noteVisible ? "on" : ""}`,
+                    className: `mini-toggle ${pe === "note" ? "on" : ""}`,
                     title: H.notes,
-                    "aria-pressed": noteVisible,
-                    onClick: () => setNoteVisible((i) => !i),
+                    "aria-pressed": pe === "note",
+                    onClick: () => {
+                      if (pe === "note") return he("brush");
+                      (setNoteVisible(!0), he("note"));
+                    },
                   },
                   r.createElement(NoteIcon, { size: 14 }),
                   H.notes,
                 ),
+                noteStrokes.length > 0 &&
+                  r.createElement(
+                    "button",
+                    {
+                      className: "mini-icon",
+                      title: noteVisible
+                        ? Me === "en"
+                          ? "Hide annotations"
+                          : Me === "es"
+                            ? "Ocultar anotaciones"
+                            : "Ocultar anotações"
+                        : Me === "en"
+                          ? "Show annotations"
+                          : Me === "es"
+                            ? "Mostrar anotaciones"
+                            : "Mostrar anotações",
+                      "aria-label": noteVisible
+                        ? "Ocultar anotações"
+                        : "Mostrar anotações",
+                      onClick: () => setNoteVisible((i) => !i),
+                    },
+                    noteVisible
+                      ? r.createElement(Ep, { size: 14 })
+                      : r.createElement(gp, { size: 14 }),
+                  ),
                 noteStrokes.length > 0 &&
                   r.createElement(
                     "button",
