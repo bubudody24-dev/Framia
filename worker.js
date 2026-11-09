@@ -29,6 +29,7 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_profiles (user_id TEXT PRIMARY KEY, username TEXT, display_name TEXT, bio TEXT, avatar TEXT, banner TEXT, banner_image TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)'),
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS framia_profiles_username ON framia_profiles(username)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_friends (id TEXT PRIMARY KEY, requester TEXT NOT NULL, target TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_settings_v2 (owner TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at INTEGER NOT NULL)'),
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS framia_friends_pair ON framia_friends(requester,target)'),
   ]).catch((cause) => { schema = undefined; throw cause; });
   await schema;
@@ -263,6 +264,53 @@ async function api(request, env, signedIn) {
           return object ? new Response(object.body, { headers: { ...privateHeaders, 'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream' } }) : error('Media not found', 404);
         }
       }
+    }
+    if (path[1] === 'settings' && path.length === 2) {
+      if (request.method === 'GET') {
+        const row = await env.DB.prepare('SELECT body FROM framia_settings_v2 WHERE owner=?').bind(user.sub).first();
+        return json({ settings: row ? JSON.parse(row.body) : null });
+      }
+      if (request.method === 'PUT') {
+        const body = await readJson(request, 200_000);
+        if (!body || typeof body !== 'object') return error('Invalid settings', 400);
+        const clean = {};
+        if (body.theme && typeof body.theme === 'object') clean.theme = body.theme;
+        if (Array.isArray(body.themes)) clean.themes = body.themes.slice(0, 40);
+        const serialized = JSON.stringify(clean);
+        if (serialized.length > 60_000) return error('Settings too large', 413);
+        await env.DB.prepare('INSERT INTO framia_settings_v2(owner,body,updated_at) VALUES(?,?,?) ON CONFLICT(owner) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at')
+          .bind(user.sub, serialized, Date.now()).run();
+        return json({ ok: true });
+      }
+      return error('Method not allowed', 405);
+    }
+    if (path[1] === 'paper' && path.length === 2) {
+      if (!env.FILES) return error('Storage unavailable', 503);
+      const key = `paper/${user.sub}`;
+      if (request.method === 'POST') {
+        const type = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        if (!/^(image\/(png|jpeg|webp|gif)|video\/(mp4|webm))$/.test(type)) return error('Unsupported paper type', 415);
+        const buffer = await request.arrayBuffer();
+        if (!buffer.byteLength) return error('Empty paper', 400);
+        if (buffer.byteLength > 12_000_000) return error('Paper too large', 413);
+        await env.FILES.put(key, buffer, { httpMetadata: { contentType: type, cacheControl: 'private, max-age=86400' } });
+        return json({ paper: { url: `/api/paper?v=${Date.now()}`, type, size: buffer.byteLength } });
+      }
+      if (request.method === 'GET') {
+        const object = await env.FILES.get(key);
+        if (!object) return error('Paper not found', 404);
+        return new Response(object.body, {
+          headers: {
+            'Cache-Control': 'private, max-age=86400',
+            'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+          },
+        });
+      }
+      if (request.method === 'DELETE') {
+        await env.FILES.delete(key);
+        return json({ ok: true });
+      }
+      return error('Method not allowed', 405);
     }
     if (path[1] === 'profile' && path[2] === 'username' && request.method === 'GET') {
       const wanted = (url.searchParams.get('u') || '').trim().toLowerCase();

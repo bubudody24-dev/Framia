@@ -16916,6 +16916,269 @@ function framiaLoadFillWasm() {
     framiaFillWasmPending
   );
 }
+
+/* Framia theme engine ------------------------------------------------- */
+const FRAMIA_THEME_TOKENS = ["#0003", "#0008", "#0009", "#000a", "#000b", "#062b2a", "#0d0e13", "#101117", "#111218", "#12131a", "#14161fdd", "#15161d", "#15161e", "#161823", "#171920", "#18192099", "#191b24", "#1b1d26", "#1b1d27", "#1b1d29", "#1b1e2b", "#1c1e28", "#1d1f2a", "#1e202aee", "#1e2030", "#20212d", "#20222d", "#221f36", "#22212f", "#22242e", "#222431", "#232530", "#232531f5", "#232531f7", "#242630", "#242631", "#242632", "#242838", "#252733", "#262a3a", "#272936d9", "#272936e8", "#272938", "#282536", "#282a35", "#282a36", "#282a37", "#292738", "#292b35", "#292b38", "#294f46", "#2a2028", "#2a2540", "#2a2b37", "#2a2c38", "#2a2c3d", "#2a2e40", "#2b2940", "#2b2b2b33", "#2b2c36", "#2b2d37", "#2b2d38", "#2b2d39", "#2c2841", "#2c293d", "#2c2a3d", "#2c2e39", "#2c3145", "#2d2d3c", "#2d2f3a", "#2d2f3b", "#2d2f3d", "#2e303a", "#302a41", "#302a42", "#302b47", "#302c43", "#302d42", "#30313b", "#30313d", "#30323d", "#31435e", "#322d49", "#322d4b", "#332d4b", "#332d4e", "#332e4a", "#332f47", "#333542", "#333545", "#342958", "#34303a", "#343048", "#343241", "#343641", "#343a4f", "#352f4f", "#353743", "#36304f", "#363845", "#36d5cd", "#383345", "#383a48", "#383a49", "#393a46", "#393b48", "#393b49", "#3a2731", "#3a3352", "#3a3357", "#3a3450", "#3a3452", "#3a3550", "#3a3b4d", "#3a3c48", "#3a3c49", "#3a3d49", "#3b3a52", "#3b3c49", "#3b3c4a", "#3b3d4b", "#3c3e4a", "#3d3159", "#3d3b50", "#3ddc97", "#403c52", "#41434e", "#41434f", "#42376b", "#423855", "#423f54", "#42414e", "#42434e", "#433758", "#44376c", "#44405c", "#44425c", "#444653", "#444655", "#453b68", "#454252", "#454753", "#454755", "#464957", "#474459", "#474957", "#484656", "#484a58", "#494456", "#494556", "#4a3547", "#4a4070", "#4a4560", "#4a465c", "#4a4759", "#4a4b59", "#4a4c59", "#4a4c5b", "#4b3f75", "#4b416b", "#4b4d5b", "#4b826e", "#4f4a62", "#514869", "#514e61", "#52546a", "#526888", "#54506a", "#555365", "#564a8e", "#565866", "#57507c", "#583a45", "#594981", "#5d5182", "#5d5579", "#6558a1", "#65597e", "#65677a", "#665594", "#66687c", "#69617d", "#6a5d9b", "#6d6093", "#6f7183", "#7164b9", "#7462d1", "#7465b6", "#766ba4", "#77718d", "#777987", "#777a8a", "#7b8095", "#7d6bb8", "#7e6847", "#7e8194", "#806fb1", "#82d1ad", "#8370ed55", "#838595", "#83859a", "#857e9c", "#85cfab", "#8675e63d", "#888a9c", "#898a9b", "#8a79e854", "#8a8c9c", "#8b8d9f", "#8b8da0", "#8b8fa3", "#8d8f9e", "#8d90a1", "#8e90a0", "#8f7ee8", "#8f90a2", "#9193a3", "#9294a5", "#9297ab", "#9395a6", "#9496a7", "#9585ed", "#9585ed22", "#9585ed2e", "#9585ed88", "#9585ed99", "#988aec", "#989aaa", "#98c9aa", "#9984d5", "#999aab", "#999baa", "#999cac", "#9a82c1", "#9a94b6", "#9a9cb0", "#9b91bd", "#9b9cac", "#9b9cad", "#9c9eae", "#9d92c9", "#9fa1b1", "#9fa1b2", "#a1a3b2", "#a2a4b4", "#a2a4b5", "#a393f5", "#a393f533", "#a393f588", "#a393fa", "#a394ff", "#a394ff12", "#a4a6b5", "#a4a6b8", "#a65c68", "#a7a3bd", "#a7a9b8", "#a8a9b8", "#a99bcf", "#a9a2c6", "#a9a2ca", "#a9aab8", "#a9aabb", "#aaa1d3", "#aaacbc", "#aeb0bd", "#aeb0bf", "#aeb0c0", "#b3a5ff", "#b3aecb", "#b4b5c3", "#b5a2ff", "#b5a4f5", "#b6a7ef", "#b7abff", "#b8a9ff", "#b9b0d8", "#b9b2d4", "#b9bbc9", "#bab6cb", "#bcaef9", "#bcbecb", "#bdb4db", "#bdbfce", "#bfc0ce", "#c1b6e8", "#c2c3d2", "#c3f6dc", "#c4bbd8", "#c6b5ff", "#c7b8ff", "#c7b9ff", "#c7b9ff44", "#c7b9ff66", "#c7c9d6", "#c8b8ff", "#c8cad8", "#c9c6d6", "#cac2e5", "#cccdd8", "#cfc8e8", "#cfc8ea", "#cfc9e6", "#cfcedb", "#d2d2df", "#d4e5ff", "#d5caff", "#d5d5df", "#d6d5df", "#d6d6e1", "#d7bf82", "#d7d2ee", "#d7d5e5", "#d7d6e5", "#d8ceff", "#d8d7e2", "#d8d8e2", "#d9cfffaa", "#d9d2ff", "#d9d8e4", "#ddd", "#ddd2fa", "#ddd3ff", "#ddd5f5", "#ded8f3", "#dedee7", "#dfd4ff", "#e0e0ea", "#e1e1eb", "#e3d5ff", "#e3dbff", "#e4dfff", "#e4e3eb", "#e5e3eb", "#e5e5ee", "#e6e0ff", "#e6e1f7", "#e6e4f0", "#e6e5ee", "#e6e5ef", "#e6e6ed", "#e88", "#e8e3ff", "#e8e5f3", "#e8e7f0", "#e8e9f2", "#e9a9b8", "#e9e7f1", "#eae4ff", "#ebe5ff", "#ececf4", "#eee9ff", "#eeecf5", "#efe9ff", "#f0edf8", "#f0eff7", "#f2d18b", "#f2d18b88", "#f2ecff", "#f2effb", "#f36083", "#f3edff", "#f5f2ff", "#f99", "#ffb4c0", "#ffc2cf", "#ffe5a9", "#fff1", "#fff8", "#ffffff0d", "#ffffff13", "#ffffff17", "#ffffff2b"];
+const FRAMIA_THEME_PRESETS = [
+  {
+    id: "framia",
+    mode: "dark",
+    accent: "#9585ed",
+    tint: 258,
+    depth: 1,
+    paper: "#ffffff",
+    label: { pt: "Framia", en: "Framia", es: "Framia" },
+    note: { pt: "Roxo original", en: "Original purple", es: "Morado original" },
+  },
+  {
+    id: "midnight",
+    mode: "dark",
+    accent: "#a78bfa",
+    tint: 262,
+    depth: 0.6,
+    paper: "#f6f5fb",
+    label: { pt: "Meia-noite", en: "Midnight", es: "Medianoche" },
+    note: { pt: "Preto profundo", en: "Deep black", es: "Negro profundo" },
+  },
+  {
+    id: "graphite",
+    mode: "dark",
+    accent: "#7fa8ff",
+    tint: 220,
+    depth: 1.06,
+    paper: "#ffffff",
+    label: { pt: "Grafite", en: "Graphite", es: "Grafito" },
+    note: { pt: "Cinza neutro", en: "Neutral grey", es: "Gris neutro" },
+  },
+  {
+    id: "paper",
+    mode: "light",
+    accent: "#6d4ae0",
+    tint: 258,
+    depth: 1,
+    paper: "#ffffff",
+    label: { pt: "Papel", en: "Paper", es: "Papel" },
+    note: { pt: "Claro e legível", en: "Light and readable", es: "Claro y legible" },
+  },
+  {
+    id: "mist",
+    mode: "light",
+    accent: "#1d5fd6",
+    tint: 220,
+    depth: 1,
+    paper: "#ffffff",
+    label: { pt: "Névoa", en: "Mist", es: "Bruma" },
+    note: { pt: "Claro azulado", en: "Cool light", es: "Claro azulado" },
+  },
+  {
+    id: "forest",
+    mode: "dark",
+    accent: "#3fc98a",
+    tint: 154,
+    depth: 0.92,
+    paper: "#fbfdfb",
+    label: { pt: "Floresta", en: "Forest", es: "Bosque" },
+    note: { pt: "Verde", en: "Green", es: "Verde" },
+  },
+  {
+    id: "ocean",
+    mode: "dark",
+    accent: "#4d9dff",
+    tint: 214,
+    depth: 0.92,
+    paper: "#fbfcff",
+    label: { pt: "Oceano", en: "Ocean", es: "Océano" },
+    note: { pt: "Azul", en: "Blue", es: "Azul" },
+  },
+  {
+    id: "ember",
+    mode: "dark",
+    accent: "#f2635f",
+    tint: 356,
+    depth: 0.92,
+    paper: "#fffafa",
+    label: { pt: "Brasa", en: "Ember", es: "Brasa" },
+    note: { pt: "Vermelho", en: "Red", es: "Rojo" },
+  },
+  {
+    id: "sol",
+    mode: "dark",
+    accent: "#ff9d42",
+    tint: 28,
+    depth: 0.94,
+    paper: "#fffaf4",
+    label: { pt: "Sol", en: "Sun", es: "Sol" },
+    note: { pt: "Laranja da logo", en: "Logo orange", es: "Naranja del logo" },
+  },
+];
+const FRAMIA_ACCENT_BASE = { h: 249, s: 0.77, l: 0.72 };
+
+function framiaHexToRgb(value) {
+  let hex = String(value || "").trim().replace(/^#/, "");
+  if (hex.length === 3 || hex.length === 4)
+    hex = hex.split("").map((c) => c + c).join("");
+  const alpha = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1;
+  return {
+    r: parseInt(hex.slice(0, 2), 16) || 0,
+    g: parseInt(hex.slice(2, 4), 16) || 0,
+    b: parseInt(hex.slice(4, 6), 16) || 0,
+    a: Number.isFinite(alpha) ? Math.round(alpha * 1000) / 1000 : 1,
+  };
+}
+function framiaRgbToHsl(r, g, b) {
+  const red = r / 255,
+    green = g / 255,
+    blue = b / 255;
+  const max = Math.max(red, green, blue),
+    min = Math.min(red, green, blue),
+    l = (max + min) / 2,
+    d = max - min;
+  if (!d) return { h: 0, s: 0, l };
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  if (max === red) h = ((green - blue) / d + (green < blue ? 6 : 0)) * 60;
+  else if (max === green) h = ((blue - red) / d + 2) * 60;
+  else h = ((red - green) / d + 4) * 60;
+  return { h, s, l };
+}
+function framiaHslToHex(h, s, l, a = 1) {
+  const hue = ((h % 360) + 360) % 360,
+    sat = Math.max(0, Math.min(1, s)),
+    lum = Math.max(0, Math.min(1, l));
+  const c = (1 - Math.abs(2 * lum - 1)) * sat,
+    x = c * (1 - Math.abs(((hue / 60) % 2) - 1)),
+    m = lum - c / 2;
+  const rgb =
+    hue < 60
+      ? [c, x, 0]
+      : hue < 120
+        ? [x, c, 0]
+        : hue < 180
+          ? [0, c, x]
+          : hue < 240
+            ? [0, x, c]
+            : hue < 300
+              ? [x, 0, c]
+              : [c, 0, x];
+  const hex = rgb
+    .map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0"))
+    .join("");
+  return a < 1
+    ? `#${hex}${Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, "0")}`
+    : `#${hex}`;
+}
+function framiaThemeColor(value, ctx) {
+  const color = framiaHexToRgb(value);
+  const hsl = framiaRgbToHsl(color.r, color.g, color.b);
+  let h = hsl.h,
+    s = hsl.s,
+    l = hsl.l;
+  // Drop shadows stay dark in every theme.
+  if (hsl.l < 0.045 && color.a < 1) return value;
+  // Translucent white washes flip to ink washes on light themes.
+  if (color.a < 1 && hsl.s < 0.25 && hsl.l > 0.82)
+    return ctx.light
+      ? framiaHslToHex(ctx.tint, 0.25, 0.12, color.a)
+      : framiaHslToHex(ctx.tint, 0.4, 0.97, color.a);
+  // Near-white brand tints are text, not accents: inverting them keeps light
+  // themes readable instead of painting lavender text on a white panel.
+  const nearWhite = hsl.l > 0.86;
+  const accentish =
+    !nearWhite && hsl.h >= 228 && hsl.h <= 292 && hsl.s >= 0.26;
+  const semantic = !accentish && hsl.s >= 0.3;
+  if (accentish) {
+    h = ctx.accent.h;
+    if (ctx.light && hsl.l < 0.42) {
+      // Dark accent panels become soft tints instead of heavy blocks on paper.
+      s = Math.min(0.5, hsl.s * 1.05);
+      l = 0.94 - hsl.l * 0.2;
+    } else {
+      s = Math.min(1, ctx.accent.s * (0.4 + hsl.s * 0.7));
+      l = ctx.light
+        ? ctx.accent.l + (hsl.l - FRAMIA_ACCENT_BASE.l) * 0.72
+        : ctx.accent.l + (hsl.l - FRAMIA_ACCENT_BASE.l) * 0.82;
+      l = Math.max(0.05, Math.min(0.96, l));
+    }
+  } else if (semantic) {
+    l = ctx.light
+      ? Math.min(hsl.l, 0.56)
+      : Math.min(1, hsl.l * ctx.depth);
+    s = Math.max(0.28, hsl.s);
+  } else if (ctx.light) {
+    h = ctx.tint;
+    s = Math.min(hsl.s * 0.6, 0.1);
+    l =
+      hsl.l <= 0.35
+        ? 0.985 - (hsl.l / 0.35) * 0.16
+        : 0.5 - ((hsl.l - 0.35) / 0.65) * 0.4;
+  } else {
+    h = ctx.tint;
+    s = Math.min(hsl.s * 0.55 + 0.05, 0.17);
+    l = Math.max(0.015, Math.min(1, hsl.l * ctx.depth));
+  }
+  return framiaHslToHex(h, s, l, color.a);
+}
+function framiaCompileTheme(theme) {
+  const t = { ...FRAMIA_THEME_PRESETS[0], ...(theme || {}) };
+  const acc = framiaRgbToHsl(
+    framiaHexToRgb(t.accent).r,
+    framiaHexToRgb(t.accent).g,
+    framiaHexToRgb(t.accent).b,
+  );
+  const ctx = {
+    light: t.mode === "light",
+    tint: Number.isFinite(t.tint) ? t.tint : acc.h,
+    depth: Number.isFinite(t.depth) ? t.depth : 1,
+    accent: acc,
+  };
+  const vars = {};
+  for (const hex of FRAMIA_THEME_TOKENS)
+    vars["--c-" + hex.slice(1)] = framiaThemeColor(hex, ctx);
+  vars["--accent"] = t.accent;
+  vars["--surface"] = framiaThemeColor(t.surface || "#1b1d27", ctx);
+  vars["--timeline-bg"] = framiaThemeColor(t.timeline || "#181920", ctx);
+  vars["--toolbar-bg"] = framiaThemeColor(t.toolbar || "#191a23", ctx);
+  vars["--paper"] = t.paper || "#ffffff";
+  vars["--accent-contrast"] = ctx.light ? "#ffffff" : "#ffffff";
+  return vars;
+}
+function framiaApplyTheme(theme) {
+  if (typeof document === "u") return;
+  const vars = framiaCompileTheme(theme);
+  const root = document.documentElement;
+  for (const key in vars) root.style.setProperty(key, vars[key]);
+  root.setAttribute("data-theme-mode", (theme && theme.mode) || "dark");
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", vars["--c-111218"]);
+}
+function framiaThemeDefaults() {
+  return { ...FRAMIA_THEME_PRESETS[0], background: "" };
+}
+function framiaReadTheme() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("framia-theme"));
+    if (!saved || typeof saved !== "object") return framiaThemeDefaults();
+    const preset =
+      FRAMIA_THEME_PRESETS.find((p) => p.id === saved.id) || null;
+    if (!saved.mode)
+      return {
+        ...framiaThemeDefaults(),
+        ...saved,
+        id: preset ? preset.id : "custom",
+        mode: "dark",
+      };
+    return { ...framiaThemeDefaults(), ...(preset || {}), ...saved };
+  } catch {
+    return framiaThemeDefaults();
+  }
+}
+function framiaThemeLabel(theme, language) {
+  const id = (theme && theme.id) || "";
+  const preset = FRAMIA_THEME_PRESETS.find((p) => p.id === id);
+  if (preset) return preset.label[language] || preset.label.pt;
+  return (theme && theme.name) || "Meu tema";
+}
+
 const FRAMIA_FONT_LOCAL = ["Manrope", "DM Sans"];
 let framiaTextCtx = null;
 function framiaFontString(o) {
@@ -18567,7 +18830,7 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       updated: "Atualizado",
       open: "Abrir projeto",
       remove: "Excluir projeto",
-      autosave: "Salvo automaticamente",
+      autosave: "Salvando automaticamente",
       saving: "Salvando...",
       failed: "Erro ao salvar",
       home: "Projetos",
@@ -18584,7 +18847,7 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       updated: "Updated",
       open: "Open project",
       remove: "Delete project",
-      autosave: "Saved automatically",
+      autosave: "Saving automatically",
       saving: "Saving...",
       failed: "Save failed",
       home: "Projects",
@@ -18601,7 +18864,7 @@ const lg = ["#22242b", "#ffffff", "#f06875", "#f6bd59", "#72a9ed", "#77d0b8"],
       updated: "Actualizado",
       open: "Abrir proyecto",
       remove: "Eliminar proyecto",
-      autosave: "Guardado automáticamente",
+      autosave: "Guardando automáticamente",
       saving: "Guardando...",
       failed: "Error al guardar",
       home: "Proyectos",
@@ -18924,19 +19187,9 @@ function cg() {
     [$e, rt] = Y.useState(null),
     [jn, Vl] = Y.useState(null),
     [Me, Ai] = Y.useState(localStorage.getItem("framia-language") || "pt"),
-    [ft, Qa] = Y.useState(() => {
-      try {
-        return (
-          JSON.parse(localStorage.getItem("framia-theme")) || {
-            accent: "#9585ed",
-            surface: "#1b1d27",
-            background: "",
-          }
-        );
-      } catch {
-        return { accent: "#9585ed", surface: "#1b1d27", background: "" };
-      }
-    }),
+    [ft, Qa] = Y.useState(framiaReadTheme),
+    [splash, setSplash] = Y.useState(!1),
+    [settingsReady, setSettingsReady] = Y.useState(!1),
     [ll, qn] = Y.useState(() => {
       try {
         return framiaLoadBrushes();
@@ -19401,6 +19654,11 @@ function cg() {
       Oa === "editor" && ba(z);
     }, [z, Oa]),
     Y.useEffect(() => {
+      if (!splash) return;
+      const timer = setTimeout(() => setSplash(!1), 2100);
+      return () => clearTimeout(timer);
+    }, [splash]),
+    Y.useEffect(() => {
       (localStorage.setItem("framia-language", Me),
         (document.documentElement.lang = Me === "pt" ? "pt-BR" : Me));
     }, [Me]),
@@ -19408,6 +19666,7 @@ function cg() {
       try {
         localStorage.setItem("framia-theme", JSON.stringify(ft));
       } catch {}
+      framiaApplyTheme(ft);
     }, [ft]),
     Y.useEffect(() => {
       try {
@@ -19422,6 +19681,32 @@ function cg() {
         localStorage.setItem("framia-themes", JSON.stringify(Bi));
       } catch {}
     }, [Bi]),
+    Y.useEffect(() => {
+      if (!Mt) return void setSettingsReady(!0);
+      let active = !0;
+      setSettingsReady(!1);
+      bu("/api/settings", "GET")
+        .then((i) => {
+          if (!active) return;
+          const saved = i && i.settings;
+          if (saved && saved.theme && typeof saved.theme === "object")
+            Qa({ ...framiaThemeDefaults(), ...saved.theme });
+          if (saved && Array.isArray(saved.themes) && saved.themes.length)
+            Ho(saved.themes);
+        })
+        .catch(() => {})
+        .finally(() => active && setSettingsReady(!0));
+      return () => {
+        active = !1;
+      };
+    }, [Mt]),
+    Y.useEffect(() => {
+      if (!Mt || !settingsReady) return;
+      const timer = setTimeout(() => {
+        gu("/api/settings", "PUT", { theme: ft, themes: Bi }).catch(() => {});
+      }, 700);
+      return () => clearTimeout(timer);
+    }, [ft, Bi, Mt, settingsReady]),
     Y.useEffect(() => {
       const i = new BroadcastChannel("framia-local");
       return (
@@ -21426,14 +21711,78 @@ function cg() {
         ul("editor"),
         Pl(s.clips));
     },
-    Vi = () =>
-      ki(
-        Sm(
-          Rt(+ra.width || 1920, 64, 8192),
-          Rt(+ra.height || 1080, 64, 8192),
-          Fl.trim() || "Meu projeto",
-        ),
-      ),
+    Vi = () => {
+      (setSplash(!0),
+        ki(
+          Sm(
+            Rt(+ra.width || 1920, 64, 8192),
+            Rt(+ra.height || 1080, 64, 8192),
+            Fl.trim() || "Meu projeto",
+          ),
+        ));
+    },
+    framiaUploadPaper = async (file) => {
+      if (!file) return;
+      const type = (file.type || "").toLowerCase();
+      if (
+        !/^(image\/(png|jpeg|webp|gif|avif)|video\/(mp4|webm|quicktime))$/.test(
+          type,
+        )
+      ) {
+        He(
+          "Formato não suportado",
+          "Use PNG, JPG, WEBP, GIF, MP4 ou WEBM como fundo de papel.",
+        );
+        return;
+      }
+      if (file.size > 12e6) {
+        He("Arquivo grande demais", "O fundo de papel aceita até 12 MB.");
+        return;
+      }
+      if (Mt)
+        try {
+          const response = await fetch("/api/paper", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": type },
+            body: file,
+          });
+          if (!response.ok) throw new Error(await response.text());
+          const data = await response.json();
+          Qa((theme) => ({
+            ...theme,
+            paperMedia: { ...data.paper, name: file.name },
+          }));
+          He("Fundo aplicado", `${file.name} agora é o seu papel.`);
+          return;
+        } catch {}
+      const reader = new FileReader();
+      reader.onload = () => {
+        Qa((theme) => ({
+          ...theme,
+          paperMedia: { url: reader.result, type, name: file.name },
+        }));
+        He(
+          "Fundo aplicado neste navegador",
+          "Entre na sua conta para levar o papel para outros dispositivos.",
+        );
+      };
+      reader.readAsDataURL(file);
+    },
+    framiaPickPaper = () => {
+      const input = document.createElement("input");
+      ((input.type = "file"),
+        (input.accept = "image/png,image/jpeg,image/webp,image/gif,image/avif,video/mp4,video/webm"),
+        (input.onchange = () => {
+          const file = input.files && input.files[0];
+          file && framiaUploadPaper(file);
+        }),
+        input.click());
+    },
+    framiaClearPaper = () => {
+      Qa((theme) => ({ ...theme, paperMedia: null }));
+      Mt && fetch("/api/paper", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+    },
     Go = async (i) => {
       try {
         let s = await Fp(i);
@@ -22295,7 +22644,14 @@ function cg() {
       const i = location.pathname + location.search,
         s = `/auth/freebuff/signin?returnTo=${encodeURIComponent(i)}`,
         h = `${s}&prompt=select_account`,
-        y = Mt ? { id: Mt.sub, name: Mt.name || "", email: Mt.email || "", picture: Mt.picture || "" } : null,
+        y = Mt
+          ? {
+              id: Mt.sub,
+              name: (profile && profile.displayName) || Mt.name || "",
+              email: Mt.email || "",
+              picture: (profile && profile.avatar) || Mt.picture || "",
+            }
+          : null,
         $ = y && !accounts.some((V) => V.id === y.id)
           ? [y, ...accounts].slice(0, FRAMIA_MAX_ACCOUNTS)
           : accounts,
@@ -22786,11 +23142,10 @@ function cg() {
         {
           className: `app ${ka ? "canvas-only" : ""}`,
           style: {
-            "--accent": ft.accent,
-            "--surface": ft.surface,
-            "--timeline-bg": ft.timeline || "#181920",
-            "--toolbar-bg": ft.toolbar || "#191a23",
             "--app-bg": ft.background ? `url(${ft.background})` : "none",
+            "--paper-image": ft.paperMedia
+              ? `url(${ft.paperMedia.url})`
+              : "none",
           },
         },
         r.createElement("input", {
@@ -22932,13 +23287,43 @@ function cg() {
             ),
             r.createElement(
               "span",
-              { className: `autosave-status ${yt}` },
-              r.createElement(im, { size: 13 }),
-              yt === "saving"
-                ? xt.saving
-                : yt === "error"
-                  ? xt.failed
-                  : xt.autosave,
+              {
+                className: `autosave-status ${yt}`,
+                role: "status",
+                "aria-live": "polite",
+                title:
+                  yt === "error"
+                    ? xt.failed
+                    : Me === "en"
+                      ? "Your work is saved to this account while you draw."
+                      : Me === "es"
+                        ? "Tu trabajo se guarda en esta cuenta mientras dibujas."
+                        : "Seu trabalho é salvo nesta conta enquanto você desenha.",
+              },
+              r.createElement("i", {
+                className: "save-dot",
+                "aria-hidden": "true",
+              }),
+              r.createElement(
+                "span",
+                { className: "save-label-full" },
+                yt === "error" ? xt.failed : xt.autosave,
+              ),
+              r.createElement(
+                "span",
+                { className: "save-label-short" },
+                yt === "error"
+                  ? Me === "en"
+                    ? "Save failed"
+                    : Me === "es"
+                      ? "Error al guardar"
+                      : "Falha ao salvar"
+                  : Me === "en"
+                    ? "Saving"
+                    : Me === "es"
+                      ? "Guardando"
+                      : "Salvando",
+              ),
             ),
             renderAccountControl(),
             r.createElement(
@@ -23604,7 +23989,160 @@ function cg() {
                 className: "canvas-viewport",
                 ref: sa,
               },
+              splash &&
+                r.createElement(
+                  "div",
+                  { className: "brand-splash", "aria-hidden": "true" },
+                  r.createElement("div", { className: "brand-splash-wash" }),
+                  r.createElement(
+                    "div",
+                    { className: "brand-splash-inner" },
+                    r.createElement("img", {
+                      className: "brand-splash-logo",
+                      src: "/brand/framia-logo.webp",
+                      alt: "",
+                    }),
+                    r.createElement(
+                      "b",
+                      { className: "brand-splash-word" },
+                      "framia",
+                      r.createElement("span", null, "."),
+                    ),
+                    r.createElement(
+                      "small",
+                      null,
+                      Me === "en"
+                        ? "painting your canvas"
+                        : Me === "es"
+                          ? "pintando tu lienzo"
+                          : "pintando sua tela",
+                    ),
+                  ),
+                ),
               r.createElement("div", { className: "canvas-grid" }),
+              r.createElement(
+                "div",
+                { className: "tool-options", role: "toolbar", "aria-label": "Propriedades da ferramenta" },
+                r.createElement(
+                  "div",
+                  { className: "tool-options-title" },
+                  r.createElement("i", { style: { background: ct } }),
+                  (Lu.find((i) => i[1] === pe) || [, , pe])[2],
+                ),
+                (pe === "brush" || pe === "eraser" || pe === "smudge") &&
+                  r.createElement(
+                    r.Fragment,
+                    null,
+                    r.createElement(
+                      "label",
+                      { className: "option-field" },
+                      r.createElement("span", null, H.size),
+                      r.createElement("input", {
+                        type: "range",
+                        min: "1",
+                        max: "400",
+                        value: Math.min(400, Ae),
+                        onChange: (i) => J(Rt(+i.target.value, 1, 1000)),
+                      }),
+                      r.createElement("b", null, Ae),
+                    ),
+                    r.createElement(
+                      "label",
+                      { className: "option-field" },
+                      r.createElement("span", null, H.opacity),
+                      r.createElement("input", {
+                        type: "range",
+                        min: "1",
+                        max: "100",
+                        value: re,
+                        onChange: (i) => ye(+i.target.value),
+                      }),
+                      r.createElement("b", null, re, "%"),
+                    ),
+                    pe === "brush" &&
+                      lt &&
+                      r.createElement(
+                        "label",
+                        { className: "option-field" },
+                        r.createElement("span", null, H.spacing),
+                        r.createElement("input", {
+                          type: "range",
+                          min: "5",
+                          max: "150",
+                          value: Yn,
+                          onChange: (i) => zu(+i.target.value),
+                        }),
+                        r.createElement("b", null, Yn, "%"),
+                      ),
+                  ),
+                pe === "fill" &&
+                  r.createElement(
+                    r.Fragment,
+                    null,
+                    r.createElement(
+                      "label",
+                      { className: "option-field" },
+                      r.createElement(
+                        "span",
+                        null,
+                        Me === "en"
+                          ? "Tolerance"
+                          : Me === "es"
+                            ? "Tolerancia"
+                            : "Tolerância",
+                      ),
+                      r.createElement("input", {
+                        type: "range",
+                        min: "0",
+                        max: "160",
+                        value: xe,
+                        onChange: (i) => ke(+i.target.value),
+                      }),
+                      r.createElement("b", null, xe),
+                    ),
+                    r.createElement(
+                      "label",
+                      { className: "option-field" },
+                      r.createElement("span", null, H.opacity),
+                      r.createElement("input", {
+                        type: "range",
+                        min: "1",
+                        max: "100",
+                        value: re,
+                        onChange: (i) => ye(+i.target.value),
+                      }),
+                      r.createElement("b", null, re, "%"),
+                    ),
+                  ),
+                (pe === "line" || pe === "rect" || pe === "ellipse") &&
+                  r.createElement(
+                    "label",
+                    { className: "option-field" },
+                    r.createElement("span", null, H.size),
+                    r.createElement("input", {
+                      type: "range",
+                      min: "1",
+                      max: "120",
+                      value: Math.min(120, Ae),
+                      onChange: (i) => J(Rt(+i.target.value, 1, 1000)),
+                    }),
+                    r.createElement("b", null, Ae),
+                  ),
+                pe !== "pan" &&
+                  pe !== "transform" &&
+                  pe !== "note" &&
+                  r.createElement(
+                    "label",
+                    { className: "option-color" },
+                    r.createElement("input", {
+                      type: "color",
+                      value: ct,
+                      onChange: (i) => Fe(i.target.value),
+                      "aria-label": H.color,
+                    }),
+                    r.createElement("span", null, ct.toUpperCase()),
+                  ),
+              ),
               r.createElement(
                 "div",
                 {
@@ -23699,6 +24237,12 @@ function cg() {
                       ),
                     ),
                   ),
+                ft.paperMedia &&
+                  r.createElement("div", {
+                    className: "paper-media",
+                    "aria-hidden": "true",
+                    style: { backgroundImage: `url(${ft.paperMedia.url})` },
+                  }),
                 r.createElement("canvas", {
                   ref: Cl,
                   className: "drawing-canvas",
@@ -25266,14 +25810,8 @@ function cg() {
                             : Oe === "shortcuts"
                               ? H.shortcuts
                               : Oe === "theme"
-                                ? H.theme
-                                : Oe === "export"
-                                  ? H.export
-                                  : Oe === "file"
-                                    ? H.file
-                                    : Oe === "edit"
-                                      ? H.edit
-                                      : Oe === "language"
+                          ? H.theme
+                          : Oe === "language"
                                         ? H.language
                                         : H.view,
                   ),
@@ -26265,121 +26803,407 @@ function cg() {
                             ),
                           )
                         : Oe === "theme"
-                          ? r.createElement(
-                              "div",
-                              { className: "modal-body" },
-                              r.createElement(
-                                "label",
-                                null,
-                                "Cor principal",
-                                r.createElement("input", {
-                                  type: "color",
-                                  value: ft.accent,
-                                  onChange: (i) =>
-                                    Qa((s) => ({
-                                      ...s,
-                                      accent: i.target.value,
-                                    })),
-                                }),
-                              ),
-                              r.createElement(
-                                "label",
-                                null,
-                                "Cor dos painéis",
-                                r.createElement("input", {
-                                  type: "color",
-                                  value: ft.surface,
-                                  onChange: (i) =>
-                                    Qa((s) => ({
-                                      ...s,
-                                      surface: i.target.value,
-                                    })),
-                                }),
-                              ),
-                              r.createElement(
-                                "label",
-                                null,
-                                "Cor da timeline",
-                                r.createElement("input", {
-                                  type: "color",
-                                  value: ft.timeline || "#181920",
-                                  onChange: (i) =>
-                                    Qa((s) => ({
-                                      ...s,
-                                      timeline: i.target.value,
-                                    })),
-                                }),
-                              ),
-                              r.createElement(
-                                "label",
-                                null,
-                                "Cor das barras",
-                                r.createElement("input", {
-                                  type: "color",
-                                  value: ft.toolbar || "#191a23",
-                                  onChange: (i) =>
-                                    Qa((s) => ({
-                                      ...s,
-                                      toolbar: i.target.value,
-                                    })),
-                                }),
-                              ),
-                              r.createElement(
-                                "button",
-                                {
-                                  className: "subtle-wide",
-                                  onClick: () => {
-                                    let i = window.prompt("Nome do tema");
-                                    i != null &&
-                                      i.trim() &&
-                                      Ho((s) => [
-                                        ...s,
-                                        { ...ft, name: i.trim() },
-                                      ]);
-                                  },
-                                },
-                                r.createElement(Uc, { size: 15 }),
-                                H.save,
-                                " ",
-                                H.theme,
-                              ),
-                              Bi.map((i, s) =>
-                                r.createElement(
-                                  "button",
+                          ? (() => {
+                              const t =
                                   {
-                                    key: s,
-                                    className: "subtle-wide",
-                                    onClick: () => Qa(i),
+                                    pt: {
+                                      hint: "Escolha um tema ou monte o seu. Tudo fica salvo na sua conta.",
+                                      presets: "Prontos",
+                                      custom: "Do seu jeito",
+                                      dark: "Escuro",
+                                      light: "Claro",
+                                      accent: "Cor de destaque",
+                                      paperColor: "Cor do papel",
+                                      depth: "Profundidade",
+                                      save: "Salvar como meu tema",
+                                      saved: "Meus temas",
+                                      paper: "Fundo do papel",
+                                      paperHint: "PNG, JPG, GIF ou MP4 atrás do desenho.",
+                                      paperAdd: "Escolher arquivo",
+                                      paperRemove: "Remover fundo",
+                                      wallpaper: "Papel de parede do estúdio",
+                                      wallpaperAdd: "Trocar papel de parede",
+                                      wallpaperRemove: "Remover papel de parede",
+                                      reset: "Voltar ao padrão",
+                                      none: "Nenhum arquivo",
+                                    },
+                                    en: {
+                                      hint: "Pick a theme or build your own. Everything saves to your account.",
+                                      presets: "Ready made",
+                                      custom: "Make it yours",
+                                      dark: "Dark",
+                                      light: "Light",
+                                      accent: "Accent colour",
+                                      paperColor: "Paper colour",
+                                      depth: "Depth",
+                                      save: "Save as my theme",
+                                      saved: "My themes",
+                                      paper: "Paper background",
+                                      paperHint: "PNG, JPG, GIF or MP4 behind the drawing.",
+                                      paperAdd: "Choose file",
+                                      paperRemove: "Remove background",
+                                      wallpaper: "Studio wallpaper",
+                                      wallpaperAdd: "Change wallpaper",
+                                      wallpaperRemove: "Remove wallpaper",
+                                      reset: "Back to default",
+                                      none: "No file",
+                                    },
+                                    es: {
+                                      hint: "Elige un tema o crea el tuyo. Todo se guarda en tu cuenta.",
+                                      presets: "Listos",
+                                      custom: "A tu manera",
+                                      dark: "Oscuro",
+                                      light: "Claro",
+                                      accent: "Color de acento",
+                                      paperColor: "Color del papel",
+                                      depth: "Profundidad",
+                                      save: "Guardar como mi tema",
+                                      saved: "Mis temas",
+                                      paper: "Fondo del papel",
+                                      paperHint: "PNG, JPG, GIF o MP4 detrás del dibujo.",
+                                      paperAdd: "Elegir archivo",
+                                      paperRemove: "Quitar fondo",
+                                      wallpaper: "Fondo del estudio",
+                                      wallpaperAdd: "Cambiar fondo",
+                                      wallpaperRemove: "Quitar fondo",
+                                      reset: "Volver al inicio",
+                                      none: "Ningún archivo",
+                                    },
                                   },
-                                  r.createElement(om, { size: 15 }),
-                                  i.name,
+                                th = t[Me] || t.pt,
+                                patch = (change) =>
+                                  Qa((current) => ({
+                                    ...current,
+                                    ...change,
+                                    id: "custom",
+                                    custom: !0,
+                                  }));
+                              return r.createElement(
+                                "div",
+                                { className: "modal-body theme-panel" },
+                                r.createElement("p", { className: "theme-hint" }, th.hint),
+                                r.createElement(
+                                  "div",
+                                  { className: "section-heading" },
+                                  r.createElement("span", null, th.presets),
                                 ),
-                              ),
-                              r.createElement(
-                                "button",
-                                {
-                                  className: "subtle-wide",
-                                  onClick: () => Zc.current.click(),
-                                },
-                                r.createElement(Ni, { size: 15 }),
-                                H.import,
-                                " background",
-                              ),
-                              r.createElement(
-                                "button",
-                                {
-                                  className: "subtle-wide",
-                                  onClick: () =>
-                                    Qa({
-                                      accent: "#9585ed",
-                                      surface: "#1b1d27",
-                                      background: "",
+                                r.createElement(
+                                  "div",
+                                  { className: "theme-grid" },
+                                  FRAMIA_THEME_PRESETS.map((preset) => {
+                                    const vars = framiaCompileTheme(preset),
+                                      selected = ft.id === preset.id && !ft.custom;
+                                    return r.createElement(
+                                      "button",
+                                      {
+                                        key: preset.id,
+                                        type: "button",
+                                        className: `theme-card ${selected ? "selected" : ""}`,
+                                        "aria-pressed": selected,
+                                        onClick: () =>
+                                          Qa({
+                                            ...preset,
+                                            background: ft.background,
+                                            paperMedia: ft.paperMedia,
+                                          }),
+                                      },
+                                      r.createElement(
+                                        "span",
+                                        {
+                                          className: "theme-preview",
+                                          style: {
+                                            background: vars["--c-111218"],
+                                            borderColor: vars["--c-2c2e39"],
+                                          },
+                                        },
+                                        r.createElement("span", {
+                                          className: "theme-preview-panel",
+                                          style: {
+                                            background: vars["--c-1b1d27"],
+                                            borderColor: vars["--c-353743"],
+                                          },
+                                        }),
+                                        r.createElement("span", {
+                                          className: "theme-preview-dot",
+                                          style: { background: preset.accent },
+                                        }),
+                                      ),
+                                      r.createElement(
+                                        "b",
+                                        null,
+                                        preset.label[Me] || preset.label.pt,
+                                      ),
+                                      r.createElement(
+                                        "small",
+                                        null,
+                                        preset.note[Me] || preset.note.pt,
+                                      ),
+                                    );
+                                  }),
+                                ),
+                                r.createElement(
+                                  "div",
+                                  { className: "section-heading" },
+                                  r.createElement("span", null, th.custom),
+                                ),
+                                r.createElement(
+                                  "div",
+                                  { className: "theme-custom" },
+                                  r.createElement(
+                                    "div",
+                                    { className: "theme-mode" },
+                                    [
+                                      ["dark", th.dark],
+                                      ["light", th.light],
+                                    ].map(([mode, label]) =>
+                                      r.createElement(
+                                        "button",
+                                        {
+                                          key: mode,
+                                          type: "button",
+                                          className:
+                                            (ft.mode || "dark") === mode
+                                              ? "selected"
+                                              : "",
+                                          onClick: () => patch({ mode }),
+                                        },
+                                        label,
+                                      ),
+                                    ),
+                                  ),
+                                  r.createElement(
+                                    "label",
+                                    null,
+                                    th.accent,
+                                    r.createElement("input", {
+                                      type: "color",
+                                      value: ft.accent,
+                                      onChange: (i) =>
+                                        patch({ accent: i.target.value }),
                                     }),
-                                },
-                                r.createElement(E1, { size: 15 }),
-                                H.reset,
-                              ),
-                            )
+                                  ),
+                                  r.createElement(
+                                    "label",
+                                    null,
+                                    th.paperColor,
+                                    r.createElement("input", {
+                                      type: "color",
+                                      value: ft.paper || "#ffffff",
+                                      onChange: (i) =>
+                                        patch({ paper: i.target.value }),
+                                    }),
+                                  ),
+                                  r.createElement(
+                                    "label",
+                                    null,
+                                    th.depth,
+                                    r.createElement("input", {
+                                      type: "range",
+                                      min: "55",
+                                      max: "130",
+                                      value: Math.round((ft.depth ?? 1) * 100),
+                                      onChange: (i) =>
+                                        patch({ depth: +i.target.value / 100 }),
+                                    }),
+                                  ),
+                                ),
+                                r.createElement(
+                                  "div",
+                                  { className: "theme-actions" },
+                                  r.createElement(
+                                    "button",
+                                    {
+                                      type: "button",
+                                      className: "subtle-wide",
+                                      onClick: () => {
+                                        const name = window.prompt(
+                                          Me === "en"
+                                            ? "Theme name"
+                                            : Me === "es"
+                                              ? "Nombre del tema"
+                                              : "Nome do tema",
+                                        );
+                                        if (!name || !name.trim()) return;
+                                        Ho((list) => [
+                                          ...list,
+                                          {
+                                            ...ft,
+                                            id: `custom-${Date.now()}`,
+                                            custom: !0,
+                                            name: name.trim(),
+                                          },
+                                        ]);
+                                      },
+                                    },
+                                    r.createElement(Uc, { size: 15 }),
+                                    th.save,
+                                  ),
+                                  r.createElement(
+                                    "button",
+                                    {
+                                      type: "button",
+                                      className: "subtle-wide",
+                                      onClick: () => {
+                                        Ho([]);
+                                        Qa((current) => ({
+                                          ...framiaThemeDefaults(),
+                                          background: current.background,
+                                          paperMedia: current.paperMedia,
+                                        }));
+                                      },
+                                    },
+                                    r.createElement(E1, { size: 15 }),
+                                    th.reset,
+                                  ),
+                                ),
+                                Bi.length > 0 &&
+                                  r.createElement(
+                                    r.Fragment,
+                                    null,
+                                    r.createElement(
+                                      "div",
+                                      { className: "section-heading" },
+                                      r.createElement("span", null, th.saved),
+                                    ),
+                                    r.createElement(
+                                      "div",
+                                      { className: "theme-saved" },
+                                      Bi.map((theme, index) =>
+                                        r.createElement(
+                                          "div",
+                                          {
+                                            key: `${theme.id || theme.name}-${index}`,
+                                            className:
+                                              ft.id === theme.id && ft.custom
+                                                ? "theme-saved-row selected"
+                                                : "theme-saved-row",
+                                          },
+                                          r.createElement(
+                                            "button",
+                                            {
+                                              type: "button",
+                                              onClick: () =>
+                                                Qa({
+                                                  ...framiaThemeDefaults(),
+                                                  ...theme,
+                                                  background: ft.background,
+                                                  paperMedia: ft.paperMedia,
+                                                }),
+                                            },
+                                            r.createElement("i", {
+                                              style: { background: theme.accent },
+                                            }),
+                                            theme.name ||
+                                              (Me === "en"
+                                                ? "My theme"
+                                                : "Meu tema"),
+                                          ),
+                                          r.createElement(
+                                            "button",
+                                            {
+                                              type: "button",
+                                              className: "theme-remove",
+                                              "aria-label": "Remover tema",
+                                              onClick: () =>
+                                                Ho((list) =>
+                                                  list.filter(
+                                                    (_, position) =>
+                                                      position !== index,
+                                                  ),
+                                                ),
+                                            },
+                                            "×",
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                r.createElement(
+                                  "div",
+                                  { className: "section-heading" },
+                                  r.createElement("span", null, th.paper),
+                                ),
+                                r.createElement(
+                                  "div",
+                                  { className: "paper-row" },
+                                  r.createElement(
+                                    "div",
+                                    { className: "paper-preview" },
+                                    ft.paperMedia
+                                      ? r.createElement("img", {
+                                          src: ft.paperMedia.url,
+                                          alt: "",
+                                        })
+                                      : r.createElement("span", {
+                                          style: { background: ft.paper || "#fff" },
+                                        }),
+                                  ),
+                                  r.createElement(
+                                    "div",
+                                    { className: "paper-meta" },
+                                    r.createElement(
+                                      "b",
+                                      null,
+                                      (ft.paperMedia && ft.paperMedia.name) || th.none,
+                                    ),
+                                    r.createElement("small", null, th.paperHint),
+                                  ),
+                                  r.createElement(
+                                    "button",
+                                    {
+                                      type: "button",
+                                      className: "subtle-wide paper-button",
+                                      onClick: framiaPickPaper,
+                                    },
+                                    r.createElement(Ni, { size: 15 }),
+                                    th.paperAdd,
+                                  ),
+                                  ft.paperMedia &&
+                                    r.createElement(
+                                      "button",
+                                      {
+                                        type: "button",
+                                        className: "subtle-wide paper-button",
+                                        onClick: framiaClearPaper,
+                                      },
+                                      th.paperRemove,
+                                    ),
+                                ),
+                                r.createElement(
+                                  "div",
+                                  { className: "section-heading" },
+                                  r.createElement("span", null, th.wallpaper),
+                                ),
+                                r.createElement(
+                                  "div",
+                                  { className: "theme-actions" },
+                                  r.createElement(
+                                    "button",
+                                    {
+                                      type: "button",
+                                      className: "subtle-wide",
+                                      onClick: () => Zc.current.click(),
+                                    },
+                                    r.createElement(Ni, { size: 15 }),
+                                    th.wallpaperAdd,
+                                  ),
+                                  ft.background &&
+                                    r.createElement(
+                                      "button",
+                                      {
+                                        type: "button",
+                                        className: "subtle-wide",
+                                        onClick: () =>
+                                          Qa((current) => ({
+                                            ...current,
+                                            background: "",
+                                          })),
+                                      },
+                                      th.wallpaperRemove,
+                                    ),
+                                ),
+                              );
+                            })()
                           : Oe === "language"
                             ? null
                             : r.createElement(
