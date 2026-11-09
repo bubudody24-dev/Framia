@@ -18705,7 +18705,7 @@ function cg() {
     [noteVisible, setNoteVisible] = Y.useState(!0),
     [_o, Za] = Y.useState([]),
     [Tt, ta] = Y.useState(null),
-    [It, Oi] = Y.useState(1),
+    [It, Oi] = Y.useState(0.42),
     [Gc, Uo] = Y.useState(239),
     [Zl, xu] = Y.useState(""),
     [Kl, Ka] = Y.useState("Canetas"),
@@ -21811,6 +21811,7 @@ function cg() {
     ma = 62 * It,
     _a = ma * z.fps,
     rulerStep = Math.max(1, Math.ceil(6 / ma)),
+    rulerLabelStep = Math.max(1, Math.ceil(78 / (ma * z.fps))),
     nn =
       Math.max(
         Hn(z.frames),
@@ -24047,18 +24048,25 @@ function cg() {
                   style: { width: nn * ma },
                 },
                 Array.from(
-                  { length: Math.min(900, Math.ceil(nn / z.fps) + 1) },
-                  (i, s) =>
-                    r.createElement(
+                  {
+                    length: Math.min(
+                      900,
+                      Math.ceil(nn / z.fps / rulerLabelStep) + 1,
+                    ),
+                  },
+                  (i, s) => {
+                    const h = s * rulerLabelStep;
+                    return r.createElement(
                       "div",
                       {
-                        key: `s${s}`,
+                        key: `s${h}`,
                         className: "ruler-mark",
-                        style: { left: s * _a },
+                        style: { left: h * _a },
                       },
                       r.createElement("i", null),
-                      r.createElement("span", null, framiaTime(s)),
-                    ),
+                      r.createElement("span", null, framiaTime(h)),
+                    );
+                  },
                 ),
                 Array.from(
                   { length: Math.min(2000, Math.floor(nn / rulerStep) + 1) },
@@ -24181,7 +24189,7 @@ function cg() {
                     {
                       key: i.id,
                       "data-frame-id": i.id,
-                      className: `frame-cell ${i.id === (ze == null ? void 0 : ze.id) ? "selected" : ""} ${v ? "frame-preview" : ""}`,
+                      className: `frame-cell ${i.id === (ze == null ? void 0 : ze.id) ? "selected" : ""} ${v ? "frame-preview" : ""} ${ma < 46 ? "compact" : ""} ${ma < 22 ? "tiny" : ""}`,
                       style: { left: i.start * ma, width: ma * Jt(i) },
                       onPointerDown: (h) => Zi(h, i),
                       onClick: () => {
@@ -24199,7 +24207,13 @@ function cg() {
                     ),
                     r.createElement(
                       "span",
-                      { className: "frame-mini" },
+                      {
+                        className: "frame-mini",
+                        style: {
+                          width: `${Math.round(Rt(ma - 12, 8, 27))}px`,
+                          height: `${Math.round(Rt((ma - 12) * 0.72, 6, 23))}px`,
+                        },
+                      },
                       r.createElement(
                         "svg",
                         { viewBox: "0 0 32 20" },

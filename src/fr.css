@@ -211,3 +211,8 @@
 .timeline-now{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:#2c2841;border:1px solid #57507c;color:#eae4ff;font-family:Manrope,sans-serif;font-size:11px;font-weight:800;letter-spacing:.2px;font-variant-numeric:tabular-nums}
 .timeline-now.playing{background:#3d3159;border-color:#a393f5;color:#fff;box-shadow:0 0 0 1px #a393f533}
 .timeline-total{font-size:9px;color:#8f90a2;font-variant-numeric:tabular-nums;white-space:nowrap}
+.frame-cell.compact{padding:3px 4px;gap:3px}
+.frame-cell.compact .frame-index{display:none}
+.frame-cell.tiny{padding:3px 2px}
+.frame-cell.tiny .frame-mini{display:none}
+.frame-cell .frame-mini{flex:none}
