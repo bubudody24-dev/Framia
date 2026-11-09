@@ -17111,12 +17111,30 @@ function framiaThemeColor(value, ctx) {
       hsl.l <= 0.35
         ? 0.985 - (hsl.l / 0.35) * 0.16
         : 0.5 - ((hsl.l - 0.35) / 0.65) * 0.4;
+    l = Math.min(1, Math.max(0, l + (ctx.dark - 50) * 0.0022));
   } else {
     h = ctx.tint;
     s = Math.min(hsl.s * 0.55 + 0.05, 0.17);
     l = Math.max(0.015, Math.min(1, hsl.l * ctx.depth));
+    l = Math.max(0.012, Math.min(1, l * (1 + (50 - ctx.dark) * 0.0062)));
   }
   return framiaHslToHex(h, s, l, color.a);
+}
+const FRAMIA_WEIGHT_STEPS = {
+  light: [250, 300, 350],
+  regular: [400, 450, 500],
+  medium: [550, 600, 650],
+  bold: [750, 800, 850],
+};
+function framiaWeightVars(weight) {
+  const step = weight === -1 || weight === 1 ? (weight === -1 ? 0 : 2) : 1;
+  return {
+    "--fw-light": String(FRAMIA_WEIGHT_STEPS.light[step]),
+    "--fw-regular": String(FRAMIA_WEIGHT_STEPS.regular[step]),
+    "--fw-medium": String(FRAMIA_WEIGHT_STEPS.medium[step]),
+    "--fw-bold": String(FRAMIA_WEIGHT_STEPS.bold[step]),
+    "--fw-shift": String(step - 1),
+  };
 }
 function framiaCompileTheme(theme) {
   const t = { ...FRAMIA_THEME_PRESETS[0], ...(theme || {}) };
@@ -17129,6 +17147,10 @@ function framiaCompileTheme(theme) {
     light: t.mode === "light",
     tint: Number.isFinite(t.tint) ? t.tint : acc.h,
     depth: Number.isFinite(t.depth) ? t.depth : 1,
+    // 50 is neutral, 100 is the darkest room, 0 lifts everything.
+    dark: Number.isFinite(t.darkness)
+      ? Math.max(0, Math.min(100, t.darkness))
+      : 50,
     accent: acc,
   };
   const vars = {};
@@ -17139,7 +17161,8 @@ function framiaCompileTheme(theme) {
   vars["--timeline-bg"] = framiaThemeColor(t.timeline || "#181920", ctx);
   vars["--toolbar-bg"] = framiaThemeColor(t.toolbar || "#191a23", ctx);
   vars["--paper"] = t.paper || "#ffffff";
-  vars["--accent-contrast"] = ctx.light ? "#ffffff" : "#ffffff";
+  vars["--accent-contrast"] = "#ffffff";
+  Object.assign(vars, framiaWeightVars(Number.isFinite(t.weight) ? t.weight : 0));
   return vars;
 }
 function framiaApplyTheme(theme) {
@@ -17154,20 +17177,36 @@ function framiaApplyTheme(theme) {
 function framiaThemeDefaults() {
   return { ...FRAMIA_THEME_PRESETS[0], background: "" };
 }
+function framiaThemeFields(source) {
+  const raw = source && typeof source === "object" ? source : {};
+  const out = {};
+  if (raw.id) out.id = String(raw.id).slice(0, 40);
+  out.mode = raw.mode === "light" ? "light" : "dark";
+  if (typeof raw.accent === "string" && /^#[0-9a-f]{6}$/i.test(raw.accent))
+    out.accent = raw.accent.toLowerCase();
+  ["tint", "depth", "darkness", "weight"].forEach((key) => {
+    if (Number.isFinite(raw[key])) out[key] = raw[key];
+  });
+  if (typeof raw.paper === "string") out.paper = raw.paper;
+  if (typeof raw.background === "string") out.background = raw.background;
+  if (raw.paperMedia && typeof raw.paperMedia.url === "string")
+    out.paperMedia = {
+      url: raw.paperMedia.url,
+      type: raw.paperMedia.type || "",
+    };
+  if (raw.name) out.name = String(raw.name).slice(0, 40);
+  if (raw.custom) out.custom = !0;
+  return out;
+}
 function framiaReadTheme() {
   try {
-    const saved = JSON.parse(localStorage.getItem("framia-theme"));
-    if (!saved || typeof saved !== "object") return framiaThemeDefaults();
-    const preset =
-      FRAMIA_THEME_PRESETS.find((p) => p.id === saved.id) || null;
-    if (!saved.mode)
-      return {
-        ...framiaThemeDefaults(),
-        ...saved,
-        id: preset ? preset.id : "custom",
-        mode: "dark",
-      };
-    return { ...framiaThemeDefaults(), ...(preset || {}), ...saved };
+    const saved = framiaThemeFields(
+      JSON.parse(localStorage.getItem("framia-theme")),
+    );
+    if (!saved.id && !saved.accent) return framiaThemeDefaults();
+    const preset = FRAMIA_THEME_PRESETS.find((p) => p.id === saved.id) || null;
+    if (preset && !saved.custom) return { ...framiaThemeDefaults(), ...preset };
+    return { ...framiaThemeDefaults(), ...saved, custom: !0 };
   } catch {
     return framiaThemeDefaults();
   }
@@ -19655,7 +19694,7 @@ function cg() {
     }, [z, Oa]),
     Y.useEffect(() => {
       if (!splash) return;
-      const timer = setTimeout(() => setSplash(!1), 2100);
+      const timer = setTimeout(() => setSplash(!1), 2850);
       return () => clearTimeout(timer);
     }, [splash]),
     Y.useEffect(() => {
@@ -22064,6 +22103,7 @@ function cg() {
           "/auth/freebuff/signin?returnTo=" + encodeURIComponent("/");
         return;
       }
+      setSplash(!0);
       (ki(
         Sm(
           Rt(+ra.width || 1920, 64, 8192),
@@ -22080,6 +22120,7 @@ function cg() {
           encodeURIComponent(location.pathname + location.search);
         return;
       }
+      setSplash(!0);
       try {
         const i = await tg(bt.current);
         Yu(i.code, i.revision);
@@ -23270,6 +23311,38 @@ function cg() {
             r.createElement("button", { onClick: () => Ve("view") }, H.view),
           ),
           r.createElement(
+            "details",
+            { className: "topbar-more" },
+            r.createElement(
+              "summary",
+              { "aria-label": "Mais opções", title: "Mais opções" },
+              "\u22EF",
+            ),
+            r.createElement(
+              "div",
+              { className: "topbar-more-list" },
+              [
+                ["file", H.file],
+                ["edit", H.edit],
+                ["settings", H.project],
+                ["view", H.view],
+              ].map(([id, label]) =>
+                r.createElement(
+                  "button",
+                  {
+                    key: id,
+                    onClick: (event) => {
+                      const box = event.currentTarget.closest("details");
+                      if (box) box.open = !1;
+                      Ve(id);
+                    },
+                  },
+                  label,
+                ),
+              ),
+            ),
+          ),
+          r.createElement(
             "div",
             { className: "project-title", onClick: () => Ve("settings") },
             r.createElement("span", { className: "project-dot" }),
@@ -23281,9 +23354,14 @@ function cg() {
             { className: "top-actions" },
             r.createElement(
               "button",
-              { className: "session room-trigger", onClick: () => Ve("room") },
+              {
+                className: nl ? "session room-trigger live" : "session room-trigger",
+                onClick: () => Ve("room"),
+                title: nl ? `Sala ${nl} · ${Ri}` : "Criar ou entrar em sala",
+                "aria-label": nl ? `Sala ${nl}` : "Criar ou entrar em sala",
+              },
               r.createElement(mm, { size: 13 }),
-              nl ? `${nl} · ${Ri}` : "Criar ou entrar em sala",
+              nl ? `Sala · ${nl}` : "Sala",
             ),
             r.createElement(
               "span",
@@ -23326,27 +23404,7 @@ function cg() {
               ),
             ),
             renderAccountControl(),
-            r.createElement(
-              "button",
-              { className: "icon-button", title: "Undo Ctrl+Z", onClick: Uu },
-              r.createElement(S1, { size: 16 }),
-            ),
-            r.createElement(
-              "button",
-              {
-                className: "icon-button",
-                title: "Redo Ctrl+Shift+Z",
-                onClick: ol,
-              },
-              r.createElement(g1, { size: 16 }),
-            ),
             r.createElement("span", { className: "top-divider" }),
-            r.createElement(
-              "button",
-              { className: "top-action", onClick: Fn },
-              r.createElement(Uc, { size: 15 }),
-              H.save,
-            ),
             r.createElement(
               "button",
               { className: "top-action primary", onClick: () => Ve("export") },
@@ -23993,18 +24051,20 @@ function cg() {
                 r.createElement(
                   "div",
                   { className: "brand-splash", "aria-hidden": "true" },
-                  r.createElement("div", { className: "brand-splash-wash" }),
+                  r.createElement("div", { className: "bs-stroke bs-stroke-a" }),
+                  r.createElement("div", { className: "bs-stroke bs-stroke-b" }),
+                  r.createElement("div", { className: "bs-plate" }),
                   r.createElement(
                     "div",
-                    { className: "brand-splash-inner" },
+                    { className: "bs-mark" },
                     r.createElement("img", {
-                      className: "brand-splash-logo",
+                      className: "bs-logo",
                       src: "/brand/framia-logo.webp",
                       alt: "",
                     }),
                     r.createElement(
                       "b",
-                      { className: "brand-splash-word" },
+                      { className: "bs-word" },
                       "framia",
                       r.createElement("span", null, "."),
                     ),
@@ -24131,17 +24191,12 @@ function cg() {
                 pe !== "pan" &&
                   pe !== "transform" &&
                   pe !== "note" &&
-                  r.createElement(
-                    "label",
-                    { className: "option-color" },
-                    r.createElement("input", {
-                      type: "color",
-                      value: ct,
-                      onChange: (i) => Fe(i.target.value),
-                      "aria-label": H.color,
-                    }),
-                    r.createElement("span", null, ct.toUpperCase()),
-                  ),
+                  r.createElement(FramiaColorPicker, {
+                    value: ct,
+                    onChange: (next) => Fe(next),
+                    label: H.color,
+                    className: "option-color",
+                  }),
               ),
               r.createElement(
                 "div",
@@ -25074,6 +25129,21 @@ function cg() {
               { className: "transport-left" },
               r.createElement(
                 "button",
+                { className: "icon-button", title: "Desfazer (Ctrl+Z)", onClick: Uu },
+                r.createElement(S1, { size: 16 }),
+              ),
+              r.createElement(
+                "button",
+                {
+                  className: "icon-button",
+                  title: "Refazer (Ctrl+Shift+Z)",
+                  onClick: ol,
+                },
+                r.createElement(g1, { size: 16 }),
+              ),
+              r.createElement("span", { className: "transport-sep" }),
+              r.createElement(
+                "button",
                 {
                   className: "icon-button",
                   title: "Voltar ao início",
@@ -25134,12 +25204,6 @@ function cg() {
             r.createElement(
               "div",
               { className: "transport-right" },
-              r.createElement(
-                "button",
-                { onClick: () => Ve("settings") },
-                r.createElement(sm, { size: 15 }),
-                H.project,
-              ),
               r.createElement(
                 "button",
                 { onClick: () => Tu((i) => !i) },
@@ -25513,28 +25577,49 @@ function cg() {
               { className: "action-group" },
               r.createElement(
                 "button",
-                { onClick: () => Fa.current.click() },
-                r.createElement(Ni, { size: 14 }),
-                H.image,
-              ),
-              r.createElement(
-                "button",
-                { onClick: () => qi.current.click() },
-                r.createElement(rm, { size: 14 }),
-                H.audio,
-              ),
-              r.createElement(
-                "button",
-                { onClick: () => Yi.current.click() },
-                r.createElement(No, { size: 14 }),
-                H.video,
-              ),
-              r.createElement("span", { className: "action-sep" }),
-              r.createElement(
-                "button",
                 { className: Yt ? "active" : "", onClick: () => ga((i) => !i) },
                 r.createElement(Mi, { size: 14 }),
                 H.onion,
+              ),
+              r.createElement(
+                "details",
+                { className: "import-menu" },
+                r.createElement(
+                  "summary",
+                  { className: "import-trigger", title: "Importar mídia" },
+                  r.createElement(Ni, { size: 14 }),
+                  Me === "en" ? "Import" : Me === "es" ? "Importar" : "Importar",
+                ),
+                r.createElement(
+                  "div",
+                  { className: "import-list" },
+                  [
+                    [Ni, H.image, "image"],
+                    [No, H.video, "video"],
+                    [rm, H.audio, "audio"],
+                  ].map(([Icon, label, kind]) =>
+                    r.createElement(
+                      "button",
+                      {
+                        key: kind,
+                        type: "button",
+                        onClick: (event) => {
+                          const box = event.currentTarget.closest("details");
+                          if (box) box.open = !1;
+                          const input =
+                            kind === "image"
+                              ? Fa.current
+                              : kind === "audio"
+                                ? qi.current
+                                : Yi.current;
+                          input && input.click();
+                        },
+                      },
+                      r.createElement(Icon, { size: 14 }),
+                      label,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -26905,6 +26990,9 @@ function cg() {
                                             ...preset,
                                             background: ft.background,
                                             paperMedia: ft.paperMedia,
+                                            darkness: ft.darkness,
+                                            weight: ft.weight,
+                                            custom: !1,
                                           }),
                                       },
                                       r.createElement(
@@ -26972,31 +27060,64 @@ function cg() {
                                     ),
                                   ),
                                   r.createElement(
+                                    "div",
+                                    { className: "theme-colors" },
+                                    r.createElement(
+                                      "label",
+                                      null,
+                                      r.createElement("span", null, th.accent),
+                                      r.createElement(FramiaColorPicker, {
+                                        value: ft.accent,
+                                        label: th.accent,
+                                        onChange: (next) => patch({ accent: next }),
+                                      }),
+                                    ),
+                                    r.createElement(
+                                      "label",
+                                      null,
+                                      r.createElement("span", null, th.paperColor),
+                                      r.createElement(FramiaColorPicker, {
+                                        value: ft.paper || "#ffffff",
+                                        label: th.paperColor,
+                                        onChange: (next) => patch({ paper: next }),
+                                      }),
+                                    ),
+                                  ),
+                                  r.createElement(
                                     "label",
-                                    null,
-                                    th.accent,
+                                    { className: "theme-slider" },
+                                    r.createElement(
+                                      "span",
+                                      null,
+                                      th.darkness || "Escuridão",
+                                      r.createElement(
+                                        "b",
+                                        null,
+                                        Math.round(ft.darkness ?? 50),
+                                      ),
+                                    ),
                                     r.createElement("input", {
-                                      type: "color",
-                                      value: ft.accent,
+                                      type: "range",
+                                      min: "0",
+                                      max: "100",
+                                      value: Math.round(ft.darkness ?? 50),
                                       onChange: (i) =>
-                                        patch({ accent: i.target.value }),
+                                        patch({ darkness: +i.target.value }),
                                     }),
                                   ),
                                   r.createElement(
                                     "label",
-                                    null,
-                                    th.paperColor,
-                                    r.createElement("input", {
-                                      type: "color",
-                                      value: ft.paper || "#ffffff",
-                                      onChange: (i) =>
-                                        patch({ paper: i.target.value }),
-                                    }),
-                                  ),
-                                  r.createElement(
-                                    "label",
-                                    null,
-                                    th.depth,
+                                    { className: "theme-slider" },
+                                    r.createElement(
+                                      "span",
+                                      null,
+                                      th.depth,
+                                      r.createElement(
+                                        "b",
+                                        null,
+                                        Math.round((ft.depth ?? 1) * 100),
+                                      ),
+                                    ),
                                     r.createElement("input", {
                                       type: "range",
                                       min: "55",
@@ -27005,6 +27126,34 @@ function cg() {
                                       onChange: (i) =>
                                         patch({ depth: +i.target.value / 100 }),
                                     }),
+                                  ),
+                                  r.createElement(
+                                    "div",
+                                    { className: "theme-weight" },
+                                    r.createElement(
+                                      "span",
+                                      null,
+                                      th.weightLabel || "Peso do texto",
+                                    ),
+                                    [
+                                      [-1, th.weightLight || "Leve"],
+                                      [0, th.weightNormal || "Normal"],
+                                      [1, th.weightBold || "Forte"],
+                                    ].map(([step, text]) =>
+                                      r.createElement(
+                                        "button",
+                                        {
+                                          key: step,
+                                          type: "button",
+                                          className:
+                                            (ft.weight ?? 0) === step
+                                              ? "selected"
+                                              : "",
+                                          onClick: () => patch({ weight: step }),
+                                        },
+                                        text,
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 r.createElement(
@@ -27326,3 +27475,297 @@ function cg() {
 sp.createRoot(document.getElementById("root")).render(
   r.createElement(cg, null),
 );
+
+/* ---- Colour picker, ibis style ------------------------------------- */
+const FRAMIA_RECENT_COLORS = "framia-recent-colors";
+const FRAMIA_PICKER_SWATCHES = [
+  "#000000", "#ffffff", "#8b8b99", "#9585ed", "#c46bd8", "#f16a8a",
+  "#f2635f", "#ff9d42", "#f2cf5b", "#3fc98a", "#3fbfc9", "#4d9dff",
+];
+function framiaRecentColors() {
+  try {
+    const list = JSON.parse(localStorage.getItem(FRAMIA_RECENT_COLORS) || "[]");
+    return Array.isArray(list)
+      ? list.filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 12)
+      : [];
+  } catch {
+    return [];
+  }
+}
+function framiaRememberColor(hex) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return;
+  try {
+    const next = [hex.toLowerCase(), ...framiaRecentColors().filter((c) => c !== hex.toLowerCase())].slice(0, 12);
+    localStorage.setItem(FRAMIA_RECENT_COLORS, JSON.stringify(next));
+  } catch {}
+}
+function framiaHsvOf(hex) {
+  const rgb = framiaHexToRgb(hex);
+  const r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / d + 2) * 60;
+    else h = ((r - g) / d + 4) * 60;
+  }
+  return { h, s: max ? d / max : 0, v: max };
+}
+function framiaHexOfHsv(h, s, v) {
+  const c = v * s, x = c * (1 - Math.abs((((h % 360) + 360) % 360) / 60 % 2 - 1)), m = v - c;
+  const hue = ((h % 360) + 360) % 360;
+  const rgb =
+    hue < 60 ? [c, x, 0] : hue < 120 ? [x, c, 0] : hue < 180 ? [0, c, x] :
+    hue < 240 ? [0, x, c] : hue < 300 ? [x, 0, c] : [c, 0, x];
+  return "#" + rgb.map((n) => Math.round((n + m) * 255).toString(16).padStart(2, "0")).join("");
+}
+const FRAMIA_I18N_PICKER = {
+  pt: { recent: "Recentes", palette: "Paleta", pick: "Conta-gotas", hex: "HEX" },
+  en: { recent: "Recent", palette: "Palette", pick: "Eyedropper", hex: "HEX" },
+  es: { recent: "Recientes", palette: "Paleta", pick: "Cuentagotas", hex: "HEX" },
+};
+
+function framiaBuildPicker(host, opts) {
+  const value0 = /^#[0-9a-f]{6}$/i.test(opts.value || "") ? opts.value.toLowerCase() : "#222222";
+  host.textContent = "";
+  host.classList.add("fc-field");
+  const swatch = document.createElement("button");
+  swatch.type = "button";
+  swatch.className = "fc-swatch";
+  swatch.setAttribute("aria-label", opts.label || "Cor");
+  const name = document.createElement("span");
+  name.className = "fc-label";
+  host.append(swatch, name);
+
+  let value = value0;
+  let pop = null;
+  const commit = (next, final) => {
+    value = next.toLowerCase();
+    swatch.style.background = value;
+    swatch.style.color = "#fff";
+    name.textContent = value.toUpperCase();
+    swatch.setAttribute("aria-label", `${opts.label || "Cor"} ${value}`);
+    if (final) framiaRememberColor(value);
+    opts.onChange && opts.onChange(value);
+  };
+  const update = () => {
+    swatch.style.background = value;
+    name.textContent = value.toUpperCase();
+  };
+  update();
+
+  function close() {
+    if (!pop) return;
+    pop.remove();
+    pop = null;
+    document.removeEventListener("pointerdown", onOutside, true);
+    document.removeEventListener("keydown", onKey, true);
+    host.classList.remove("open");
+    window.removeEventListener("resize", close);
+  }
+  function onOutside(event) {
+    if (pop && !pop.contains(event.target) && !host.contains(event.target)) close();
+  }
+  function onKey(event) {
+    if (event.key === "Escape") { event.stopPropagation(); close(); }
+  }
+
+  function open() {
+    if (pop) return close();
+    const lang = (document.documentElement.lang || "pt").slice(0, 2);
+    const T = FRAMIA_I18N_PICKER[lang] || FRAMIA_I18N_PICKER.pt;
+    const hsv = framiaHsvOf(value);
+    pop = document.createElement("div");
+    pop.className = "fc-pop";
+    pop.setAttribute("role", "dialog");
+    pop.setAttribute("aria-label", opts.label || "Escolher cor");
+    pop.innerHTML = `
+      <div class="fc-area"><div class="fc-area-dot"></div></div>
+      <div class="fc-hue"><i></i></div>
+      <div class="fc-readout">
+        <span class="fc-now"></span>
+        <span class="fc-fields">
+          <label>${T.hex}<input class="fc-hex" maxlength="7" spellcheck="false" aria-label="${T.hex}"></label>
+          <label>R<input class="fc-r" type="number" min="0" max="255"></label>
+          <label>G<input class="fc-g" type="number" min="0" max="255"></label>
+          <label>B<input class="fc-b" type="number" min="0" max="255"></label>
+        </span>
+      </div>
+      <div class="fc-row"><span class="fc-chip-title">${T.recent}</span><span class="fc-recent"></span></div>
+      <div class="fc-row"><span class="fc-chip-title">${T.palette}</span><span class="fc-palette"></span></div>
+      <button type="button" class="fc-eyedrop">${T.pick}</button>`;
+    document.body.appendChild(pop);
+    host.classList.add("open");
+    host.after && 0;
+    const box = host.getBoundingClientRect();
+    pop.style.left = Math.min(Math.max(8, box.left), window.innerWidth - pop.offsetWidth - 8) + "px";
+    const below = box.bottom + 8;
+    pop.style.top = (below + pop.offsetHeight > window.innerHeight - 8
+      ? Math.max(8, box.top - pop.offsetHeight - 8)
+      : below) + "px";
+
+    const area = pop.querySelector(".fc-area");
+    const dot = pop.querySelector(".fc-area-dot");
+    const hue = pop.querySelector(".fc-hue");
+    const hueDot = pop.querySelector(".fc-hue i");
+    const now = pop.querySelector(".fc-now");
+    const hexIn = pop.querySelector(".fc-hex");
+    const rIn = pop.querySelector(".fc-r");
+    const gIn = pop.querySelector(".fc-g");
+    const bIn = pop.querySelector(".fc-b");
+    let H = hsv.h, S = hsv.s, V = hsv.v;
+
+    function render(commitIt) {
+      const hex = framiaHexOfHsv(H, S, V);
+      area.style.background =
+        `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${H},100%,50%))`;
+      dot.style.left = `${S * 100}%`;
+      dot.style.top = `${(1 - V) * 100}%`;
+      dot.style.background = hex;
+      hueDot.style.left = `${(H / 360) * 100}%`;
+      hueDot.style.background = `hsl(${H},100%,50%)`;
+      now.style.background = hex;
+      now.textContent = hex.toUpperCase();
+      if (document.activeElement !== hexIn) hexIn.value = hex.toUpperCase();
+      if (document.activeElement !== rIn) rIn.value = framiaHexToRgb(hex).r;
+      if (document.activeElement !== gIn) gIn.value = framiaHexToRgb(hex).g;
+      if (document.activeElement !== bIn) bIn.value = framiaHexToRgb(hex).b;
+      if (commitIt) commit(hex, false);
+    }
+
+    function drag(el, apply) {
+      const move = (event) => {
+        const rect = el.getBoundingClientRect();
+        apply(
+          Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+          Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+        );
+      };
+      el.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        el.setPointerCapture(event.pointerId);
+        move(event);
+        el.addEventListener("pointermove", move);
+        const stop = () => {
+          el.removeEventListener("pointermove", move);
+          el.removeEventListener("pointerup", stop);
+          commit(value, true);
+        };
+        el.addEventListener("pointerup", stop);
+      });
+    }
+    drag(area, (x, y) => { S = x; V = 1 - y; render(true); });
+    drag(hue, (x) => { H = x * 360; render(true); });
+
+    hexIn.addEventListener("change", () => {
+      const hex = hexIn.value.trim().replace(/^#?/, "#");
+      if (!/^#[0-9a-f]{6}$/i.test(hex)) return render(false);
+      const next = framiaHsvOf(hex.toLowerCase());
+      H = next.h; S = next.s; V = next.v;
+      render(true);
+    });
+    [rIn, gIn, bIn].forEach((input) =>
+      input.addEventListener("change", () => {
+        const hex = framiaHslToHex(0, 0, 0);
+        const r = Math.max(0, Math.min(255, +rIn.value || 0));
+        const g = Math.max(0, Math.min(255, +gIn.value || 0));
+        const b = Math.max(0, Math.min(255, +bIn.value || 0));
+        const next = "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("");
+        const h2 = framiaHsvOf(next);
+        H = h2.h; S = h2.s; V = h2.v;
+        render(true);
+        void hex;
+      }),
+    );
+
+    const recent = pop.querySelector(".fc-recent");
+    const paintChips = () => {
+      recent.textContent = "";
+      const list = framiaRecentColors();
+      (list.length ? list : FRAMIA_PICKER_SWATCHES.slice(3, 6)).forEach((hex) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "fc-chip";
+        chip.style.background = hex;
+        chip.title = hex.toUpperCase();
+        chip.addEventListener("click", () => {
+          const next = framiaHsvOf(hex);
+          H = next.h; S = next.s; V = next.v;
+          render(true);
+          commit(hex, true);
+          paintChips();
+        });
+        recent.appendChild(chip);
+      });
+    };
+    paintChips();
+    const palette = pop.querySelector(".fc-palette");
+    FRAMIA_PICKER_SWATCHES.forEach((hex) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "fc-chip";
+      chip.style.background = hex;
+      chip.title = hex.toUpperCase();
+      chip.addEventListener("click", () => {
+        const next = framiaHsvOf(hex);
+        H = next.h; S = next.s; V = next.v;
+        render(true);
+        commit(hex, true);
+      });
+      palette.appendChild(chip);
+    });
+
+    const eye = pop.querySelector(".fc-eyedrop");
+    if (!window.EyeDropper) eye.remove();
+    else
+      eye.addEventListener("click", async () => {
+        try {
+          const result = await new window.EyeDropper().open();
+          const next = framiaHsvOf(result.sRGBHex.toLowerCase());
+          H = next.h; S = next.s; V = next.v;
+          render(true);
+          commit(result.sRGBHex, true);
+        } catch {}
+      });
+    render(false);
+    document.addEventListener("pointerdown", onOutside, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", close);
+  }
+
+  swatch.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (pop) close();
+    else open();
+  });
+  host.__setColor = (hex) => {
+    if (!/^#[0-9a-f]{6}$/i.test(hex || "")) return;
+    value = hex.toLowerCase();
+    update();
+  };
+  return { destroy: close, close };
+}
+
+function FramiaColorPicker({ value, onChange, label, className }) {
+  const host = Y.useRef(null);
+  const handler = Y.useRef(onChange);
+  handler.current = onChange;
+  Y.useEffect(() => {
+    if (!host.current) return;
+    const api = framiaBuildPicker(host.current, {
+      value,
+      label,
+      onChange: (next) => handler.current && handler.current(next),
+    });
+    return () => api.destroy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  Y.useEffect(() => {
+    if (host.current && host.current.__setColor) host.current.__setColor(value);
+  }, [value]);
+  return r.createElement("div", {
+    ref: host,
+    className: className ? `fc-host ${className}` : "fc-host",
+  });
+}
