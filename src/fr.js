@@ -16941,6 +16941,7 @@ function framiaTextElement(o) {
       weight: 700,
       italic: !1,
       color: "#222222",
+      align: "left",
       opacity: 1,
       ...o,
     },
@@ -20925,7 +20926,8 @@ function cg() {
         s.guides = (s.guides || []).filter((h) => h.id !== i);
       }),
     selectTool = (i) => {
-      (i !== "transform" && M && $e && Gi(),
+      (i !== "text" && setTextId(null),
+        i !== "transform" && M && $e && Gi(),
         i !== "transform" && restoreToolSettings(i),
         i === "transform" ? Bu() : he(i));
     },
@@ -23312,26 +23314,20 @@ function cg() {
                   "size" in patch ||
                   "font" in patch ||
                   "weight" in patch ||
-                  "italic" in patch
+                  "italic" in patch ||
+                  "align" in patch
                 ) {
                   const m = framiaTextMetrics(nextEl);
                   ((nextEl.w = m.w), (nextEl.h = m.h));
                 }
-                te((i) => {
-                  const s2 = i.content[ze.id] || {},
-                    h = s2[ee] || [];
-                  return {
-                    ...i,
-                    revision: ++Gn.current,
-                    content: {
-                      ...i.content,
-                      [ze.id]: {
-                        ...s2,
-                        [ee]: h.map((y) =>
-                          y.id === textEl.id ? { ...y, ...nextEl } : y,
-                        ),
-                      },
-                    },
+                De((i) => {
+                  const frame = i.content[ze.id] || {},
+                    list = frame[ee] || [];
+                  i.content[ze.id] = {
+                    ...frame,
+                    [ee]: list.map((el) =>
+                      el.id === textEl.id ? { ...el, ...nextEl } : el,
+                    ),
                   };
                 });
                 B({
@@ -23383,13 +23379,18 @@ function cg() {
                       title: "Fechar",
                       onClick: () => setTextId(null),
                     },
-                    r.createElement(Hc, { size: 14 }),
+                    r.createElement(dm, { size: 14 }),
                   ),
                 ),
                 r.createElement("textarea", {
+                  key: textEl.id,
+                  autoFocus: true,
                   value: textEl.text,
                   rows: 2,
                   spellCheck: false,
+                  onKeyDown: (i) => {
+                    if (i.key === "Escape") (i.preventDefault(), setTextId(null));
+                  },
                   placeholder:
                     Me === "en"
                       ? "Type something"
@@ -23458,6 +23459,56 @@ function cg() {
                       onClick: () => patchText({ italic: !textEl.italic }),
                     },
                     "i",
+                  ),
+                ),
+                r.createElement(
+                  "div",
+                  { className: "text-align" },
+                  ["left", "center", "right"].map((al) =>
+                    r.createElement(
+                      "button",
+                      {
+                        key: al,
+                        className: `align-btn ${(textEl.align || "left") === al ? "on" : ""}`,
+                        title:
+                          al === "left"
+                            ? "Alinhar à esquerda"
+                            : al === "center"
+                              ? "Centralizar"
+                              : "Alinhar à direita",
+                        onClick: () => patchText({ align: al }),
+                      },
+                      r.createElement(
+                        "svg",
+                        {
+                          viewBox: "0 0 16 16",
+                          width: 14,
+                          height: 14,
+                          fill: "currentColor",
+                        },
+                        r.createElement("rect", {
+                          x: 2,
+                          y: 3,
+                          width: 12,
+                          height: 1.7,
+                          rx: 0.85,
+                        }),
+                        r.createElement("rect", {
+                          x: al === "left" ? 2 : al === "right" ? 6 : 4,
+                          y: 7,
+                          width: 8,
+                          height: 1.7,
+                          rx: 0.85,
+                        }),
+                        r.createElement("rect", {
+                          x: 2,
+                          y: 11,
+                          width: 12,
+                          height: 1.7,
+                          rx: 0.85,
+                        }),
+                      ),
+                    ),
                   ),
                 ),
                 r.createElement(
@@ -23606,6 +23657,13 @@ function cg() {
                   onPointerMove: $a,
                   onPointerUp: an,
                   onPointerCancel: an,
+                  onDoubleClick: (i) => {
+                    const pt = en(i),
+                      hit = [...mt]
+                        .reverse()
+                        .find((el) => el.type === "text" && Vp(el, pt, 6));
+                    hit && (selectTool("text"), tn([hit.id]), setTextId(hit.id));
+                  },
                 }),
                 r.createElement("canvas", {
                   ref: noteRef,

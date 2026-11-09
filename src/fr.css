@@ -248,3 +248,7 @@
 .text-panel input[type=color]{appearance:none;-webkit-appearance:none;border-radius:6px}
 .text-panel input[type=color]::-webkit-color-swatch-wrapper{padding:0}
 .text-panel input[type=color]::-webkit-color-swatch{border:0;border-radius:4px}
+.text-panel .text-align{display:flex;gap:6px}
+.text-panel .align-btn{flex:1;height:28px;display:grid;place-items:center;border:1px solid #423f54;background:#242630;border-radius:6px;color:#b3aecb}
+.text-panel .align-btn:hover{background:#2d2f3d;color:#e6e1f7}
+.text-panel .align-btn.on{border-color:var(--accent);background:#3a3357;color:#fff}
