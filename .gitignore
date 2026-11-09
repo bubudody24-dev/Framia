@@ -6,3 +6,4 @@ artifacts/
 .vite/
 *.log
 /freebuff-sites-build/
+wasm/fill/target/

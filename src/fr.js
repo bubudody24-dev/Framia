@@ -16903,6 +16903,19 @@ const FRAMIA_FONT_KEY = "framia-fonts",
     "Caveat",
     "Lora",
   ];
+let framiaFillWasm = null,
+  framiaFillWasmPending = null;
+function framiaLoadFillWasm() {
+  return (
+    framiaFillWasmPending ||
+      (framiaFillWasmPending = fetch("/wasm/fill.wasm")
+        .then((o) => (o.ok ? o.arrayBuffer() : Promise.reject(o.status)))
+        .then((o) => WebAssembly.instantiate(o, {}))
+        .then((o) => ((framiaFillWasm = o.instance.exports), framiaFillWasm))
+        .catch(() => null)),
+    framiaFillWasmPending
+  );
+}
 const FRAMIA_FONT_LOCAL = ["Manrope", "DM Sans"];
 let framiaTextCtx = null;
 function framiaFontString(o) {
@@ -17612,8 +17625,41 @@ function Wp(o, d, v, f, g, b, N = 1) {
     ne = parseInt(b.slice(3, 5), 16),
     z = parseInt(b.slice(5, 7), 16);
   if (![oe, ne, z].every(Number.isFinite)) return null;
-  const te = Math.round(N * 255),
-    P = (ee) => {
+  const te = Math.round(N * 255);
+  if (framiaFillWasm) {
+    const size = M * B * 4,
+      ptr = framiaFillWasm.alloc(size);
+    if (ptr) {
+      new Uint8Array(framiaFillWasm.memory.buffer, ptr, size).set(p);
+      const filled = framiaFillWasm.fill(
+        ptr,
+        M,
+        B,
+        f,
+        g,
+        oe,
+        ne,
+        z,
+        te,
+        70,
+        2,
+      );
+      if (filled > 0) {
+        const out = new Uint8ClampedArray(size);
+        (out.set(new Uint8Array(framiaFillWasm.memory.buffer, ptr, size)),
+          framiaFillWasm.dealloc(ptr, size));
+        const outCanvas = document.createElement("canvas");
+        ((outCanvas.width = M), (outCanvas.height = B));
+        outCanvas
+          .getContext("2d")
+          .putImageData(new ImageData(out, M, B), 0, 0);
+        return outCanvas.toDataURL("image/png");
+      }
+      framiaFillWasm.dealloc(ptr, size);
+      return null;
+    }
+  }
+  const P = (ee) => {
       const Ee = ee * 4;
       return (
         Math.abs(p[Ee] - Z[0]) +
@@ -19074,6 +19120,9 @@ function cg() {
     ),
     [],
   ),
+    Y.useEffect(() => {
+      framiaLoadFillWasm();
+    }, []),
     Y.useEffect(() => {
       const list = framiaInstalledFonts();
       if (!list.length) return;

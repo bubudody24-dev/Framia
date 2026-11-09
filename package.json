@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build && bun run build:worker",
     "build:worker": "esbuild worker.js --bundle --format=esm --platform=browser --target=es2022 --outfile=dist-worker/worker.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:wasm": "cargo build --release --manifest-path wasm/fill/Cargo.toml --target wasm32-unknown-unknown && cp wasm/fill/target/wasm32-unknown-unknown/release/framia_fill.wasm public/wasm/fill.wasm"
   },
   "devDependencies": {
     "esbuild": "0.25.12",
