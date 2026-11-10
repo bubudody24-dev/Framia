@@ -1162,7 +1162,7 @@ body {
   background: var(--c-322c4b);
 }
 
-/* Opening paint sweep ------------------------------------------------ */
+/* Opening: the brush paints the screen ------------------------------- */
 .brand-splash {
   position: fixed;
   inset: 0;
@@ -1172,56 +1172,24 @@ body {
   display: grid;
   place-items: center;
   background: var(--c-0a0b10, #07080c);
-  animation: bsOut 0.5s ease 1.95s forwards;
+  animation: bsOut 0.44s ease 2.16s forwards;
 }
-.bs-stroke {
-  position: absolute;
-  top: -14%;
-  bottom: -14%;
-  width: 78%;
-  filter: blur(1.5px);
-  will-change: transform;
-}
-.bs-stroke-a {
-  left: -6%;
-  transform-origin: left center;
-  background: linear-gradient(
-    104deg,
-    #4a2fa8 0%,
-    #6d4ae0 24%,
-    #9585ed 48%,
-    #b07cff 68%,
-    #ff9d42 100%
-  );
-  clip-path: polygon(
-    0 0, 52% 1%, 64% 12%, 58% 26%, 71% 40%, 60% 55%,
-    73% 68%, 61% 82%, 68% 100%, 0 99%
-  );
-  animation: bsSweepA 0.66s cubic-bezier(0.55, 0.02, 0.2, 1) 0.46s both;
-}
-.bs-stroke-b {
-  right: -6%;
-  transform-origin: right center;
-  background: linear-gradient(
-    256deg,
-    #ffb257 0%,
-    #ff8f5c 18%,
-    #ff7ab8 42%,
-    #b07cff 68%,
-    #6d4ae0 100%
-  );
-  clip-path: polygon(
-    100% 0, 48% 1%, 36% 12%, 42% 26%, 29% 40%, 40% 55%,
-    27% 68%, 39% 82%, 32% 100%, 100% 99%
-  );
-  animation: bsSweepB 0.66s cubic-bezier(0.55, 0.02, 0.2, 1) 1.02s both;
-}
-.bs-plate {
+.bs-canvas {
   position: absolute;
   inset: 0;
-  background: linear-gradient(115deg, #4a2fa8, #8b6cf0 45%, #ff9d42);
+  width: 100%;
+  height: 100%;
+}
+.bs-brush {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: clamp(54px, 12vmin, 88px);
+  height: auto;
   opacity: 0;
-  animation: bsPlate 0.42s ease 1.5s both;
+  transform-origin: 50% 100%;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 16px 22px rgba(5, 2, 24, 0.4));
 }
 .bs-mark {
   position: relative;
@@ -1231,8 +1199,8 @@ body {
   gap: 7px;
   color: #fff;
   text-align: center;
-  animation: bsMarkIn 0.46s cubic-bezier(0.2, 0.9, 0.2, 1) 0.05s both,
-    bsMarkOut 0.4s ease 0.98s forwards;
+  animation: bsMarkIn 0.44s cubic-bezier(0.2, 0.9, 0.2, 1) 0.04s both,
+    bsMarkOut 0.34s ease 0.6s forwards;
 }
 .bs-logo {
   width: 92px;
@@ -1257,32 +1225,6 @@ body {
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.72);
 }
-@keyframes bsSweepA {
-  from {
-    transform: scaleX(0.015) rotate(-1.2deg);
-  }
-  to {
-    transform: scaleX(1) rotate(-1.2deg);
-  }
-}
-@keyframes bsSweepB {
-  from {
-    transform: scaleX(0.015) rotate(1.1deg);
-  }
-  to {
-    transform: scaleX(1) rotate(1.1deg);
-  }
-}
-@keyframes bsPlate {
-  from {
-    opacity: 0;
-    transform: scale(1.06);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
 @keyframes bsMarkIn {
   from {
     opacity: 0;
@@ -1296,7 +1238,7 @@ body {
 @keyframes bsMarkOut {
   to {
     opacity: 0;
-    transform: translateY(-14px) scale(1.06);
+    transform: translateY(-12px) scale(1.04);
   }
 }
 @keyframes bsOut {
@@ -1308,10 +1250,7 @@ body {
   background: #f6f5fb;
 }
 @media (prefers-reduced-motion: reduce) {
-  .bs-stroke-a,
-  .bs-stroke-b,
-  .bs-plate {
-    animation-duration: 0.01ms !important;
+  .bs-mark {
     animation-delay: 0ms !important;
   }
 }

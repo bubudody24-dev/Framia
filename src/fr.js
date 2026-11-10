@@ -19694,7 +19694,7 @@ function cg() {
     }, [z, Oa]),
     Y.useEffect(() => {
       if (!splash) return;
-      const timer = setTimeout(() => setSplash(!1), 2850);
+      const timer = setTimeout(() => setSplash(!1), 2620);
       return () => clearTimeout(timer);
     }, [splash]),
     Y.useEffect(() => {
@@ -24051,9 +24051,15 @@ function cg() {
                 r.createElement(
                   "div",
                   { className: "brand-splash", "aria-hidden": "true" },
-                  r.createElement("div", { className: "bs-stroke bs-stroke-a" }),
-                  r.createElement("div", { className: "bs-stroke bs-stroke-b" }),
-                  r.createElement("div", { className: "bs-plate" }),
+                  r.createElement("canvas", {
+                    className: "bs-canvas",
+                    ref: framiaIntroPaint,
+                  }),
+                  r.createElement("img", {
+                    className: "bs-brush",
+                    src: "/brand/framia-brush.svg",
+                    alt: "",
+                  }),
                   r.createElement(
                     "div",
                     { className: "bs-mark" },
@@ -27524,6 +27530,132 @@ const FRAMIA_I18N_PICKER = {
   en: { recent: "Recent", palette: "Palette", pick: "Eyedropper", hex: "HEX" },
   es: { recent: "Recientes", palette: "Paleta", pick: "Cuentagotas", hex: "HEX" },
 };
+
+
+/* Opening: a brush travels across the screen and paints it ------------- */
+function framiaIntroPaint(canvas) {
+  if (!canvas || !canvas.getContext) return;
+  requestAnimationFrame(function () {
+    var ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    var reduce =
+      window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var W = 0,
+      H = 0,
+      bandH = 0,
+      grad = null,
+      rows = [],
+      brush = null,
+      prev = null,
+      prevBand = -1;
+    var BANDS = 3,
+      T0 = 660,
+      DUR = 1280;
+    var startAt = performance.now();
+
+    function hash(n) {
+      var x = Math.sin(n * 12.9898) * 43758.5453;
+      return x - Math.floor(x);
+    }
+    function ease(t) {
+      return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    }
+    function setup() {
+      W = canvas.clientWidth || window.innerWidth;
+      H = canvas.clientHeight || window.innerHeight;
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineCap = "butt";
+      ctx.lineJoin = "round";
+      grad = ctx.createLinearGradient(0, 0, W, 0);
+      grad.addColorStop(0, "#3d1f96");
+      grad.addColorStop(0.16, "#5d2ed2");
+      grad.addColorStop(0.38, "#8d59f3");
+      grad.addColorStop(0.58, "#b86cef");
+      grad.addColorStop(0.76, "#f2689d");
+      grad.addColorStop(1, "#ff9d42");
+      bandH = (H / BANDS) * 1.46;
+      rows = [];
+      for (var i = 0; i < BANDS; i++) {
+        var right = i % 2 === 0;
+        rows.push({
+          y: (i + 0.5) * (H / BANDS),
+          x0: right ? -W * 0.12 : W * 1.12,
+          x1: right ? W * 1.12 : -W * 0.12,
+          dir: right ? 1 : -1,
+        });
+      }
+      if (reduce) {
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+    /* Ry = vertical wave of the brush, so the stroke is hand-painted */
+    function waveY(row, local) {
+      return row.y + Math.sin(local * Math.PI * 2.2 + row.y) * bandH * 0.055;
+    }
+    function paintSegment(from, to) {
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = bandH * (1 + 0.03 * Math.sin(to.x / 41));
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    }
+    function placeBrush(x, y, dir, t) {
+      if (!brush) return;
+      var bw = brush.offsetWidth || 64,
+        bh = brush.offsetHeight || 128;
+      brush.style.transform =
+        "translate(" +
+        (x - bw / 2).toFixed(1) +
+        "px," +
+        (y - bh * 0.985).toFixed(1) +
+        "px) rotate(" +
+        (dir > 0 ? -17 : 17) +
+        "deg)";
+      var inn = Math.min(1, Math.max(0, (t - 470) / 250));
+      var out = Math.min(1, Math.max(0, (t - 2040) / 340));
+      brush.style.opacity = (inn * (1 - out)).toFixed(3);
+    }
+    function frame(now) {
+      if (!W) setup();
+      if (reduce) return;
+      if (!brush) brush = document.querySelector(".bs-brush");
+      var t = now - startAt;
+      var p = (t - T0) / DUR;
+      if (p < 0) {
+        var r0 = rows[0];
+        placeBrush(r0.x0 + r0.dir * 8, r0.y, r0.dir, t);
+      } else if (p < 1) {
+        var f = ease(p) * BANDS;
+        var bi = Math.min(BANDS - 1, Math.floor(f));
+        var local = Math.min(1, f - bi);
+        var row = rows[bi];
+        var y = waveY(row, local);
+        var x = row.x0 + (row.x1 - row.x0) * local;
+        if (bi !== prevBand) {
+          prevBand = bi;
+          prev = { x: row.x0, y: y };
+        }
+        paintSegment({ x: prev.x - 12 * row.dir, y: prev.y }, { x: x, y: y });
+        prev = { x: x, y: y };
+        placeBrush(x, y, row.dir, t);
+      } else {
+        var last = rows[BANDS - 1];
+        var ly = waveY(last, 1);
+        var tail = prev || { x: last.x0, y: ly };
+        paintSegment({ x: tail.x - 12 * last.dir, y: tail.y }, { x: last.x1, y: ly });
+        placeBrush(last.x1, ly, last.dir, t);
+        return;
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+}
 
 function framiaBuildPicker(host, opts) {
   const value0 = /^#[0-9a-f]{6}$/i.test(opts.value || "") ? opts.value.toLowerCase() : "#222222";

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 240" width="120" height="240">
+  <defs>
+    <linearGradient id="blade" x1="26" y1="8" x2="104" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".58" stop-color="#fbf7ff"/>
+      <stop offset="1" stop-color="#e2d7ff"/>
+    </linearGradient>
+    <linearGradient id="ferrule" x1="36" y1="140" x2="84" y2="166" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b49bfd"/>
+      <stop offset="1" stop-color="#5927cf"/>
+    </linearGradient>
+    <linearGradient id="bristle" x1="28" y1="156" x2="92" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7443ec"/>
+      <stop offset=".42" stop-color="#c65ce6"/>
+      <stop offset=".74" stop-color="#ff6fae"/>
+      <stop offset="1" stop-color="#ffa046"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="44" y1="18" x2="74" y2="138" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <path d="M62 8c30 12 44 46 34 84-5 20-13 36-20 50H42c-5-24-10-48-8-74 2-28 12-49 28-60Z"
+        fill="url(#blade)" stroke="#5b2fc9" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M55 24c11 12 16 32 14 55-1 15-5 28-8 39" fill="none" stroke="#cbbaf7" stroke-width="3" stroke-linecap="round"/>
+  <path d="M72 30c10 15 12 38 6 60-2 11-7 22-10 30" fill="none" stroke="#e6ddfc" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M44 26c-4 20-5 46-2 72 1 12 4 26 7 38" fill="none" stroke="url(#sheen)" stroke-width="6" stroke-linecap="round" opacity=".85"/>
+
+  <rect x="38" y="138" width="40" height="26" rx="9" fill="url(#ferrule)" stroke="#4a22a0" stroke-width="4"/>
+  <path d="M45 145h26" stroke="#ffffff" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/>
+
+  <path d="M40 160c-12 28-10 54 16 76 26-22 30-48 20-76Z"
+        fill="url(#bristle)" stroke="#4a22a0" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M48 166c-6 22-5 44 6 66" fill="none" stroke="#ffffff" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/>
+  <path d="M57 166c-2 26-1 50 3 66" fill="none" stroke="#ffffff" stroke-opacity=".34" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M66 166c3 22 0 44-4 64" fill="none" stroke="#ffffff" stroke-opacity=".44" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M75 167c8 20 6 40-6 58" fill="none" stroke="#ffffff" stroke-opacity=".3" stroke-width="2" stroke-linecap="round"/>
+</svg>
