@@ -16791,7 +16791,12 @@ function G1(o) {
       ];
 }
 function xm(o) {
-  if (o.type === "image" || o.type === "shape" || o.type === "text")
+  if (
+    o.type === "image" ||
+    o.type === "shape" ||
+    o.type === "text" ||
+    o.type === "extrude"
+  )
     return { x: o.x, y: o.y, w: Math.max(1, o.w), h: Math.max(1, o.h) };
   const d = o.points || [];
   if (!d.length) return { x: 0, y: 0, w: 1, h: 1 };
@@ -17188,7 +17193,10 @@ function framiaThemeFields(source) {
     if (Number.isFinite(raw[key])) out[key] = raw[key];
   });
   if (typeof raw.paper === "string") out.paper = raw.paper;
-  if (typeof raw.background === "string") out.background = raw.background;
+  if (typeof raw.background === "string" && raw.background.length < 400000) {
+    out.background = raw.background;
+    if (raw.wallpaperName) out.wallpaperName = String(raw.wallpaperName).slice(0, 120);
+  }
   if (raw.paperMedia && typeof raw.paperMedia.url === "string")
     out.paperMedia = {
       url: raw.paperMedia.url,
@@ -17271,6 +17279,18 @@ function framiaInstalledFonts() {
   } catch {
     return [];
   }
+}
+function framiaTextFont() {
+  try {
+    return localStorage.getItem("framia-text-font") || "Manrope";
+  } catch {
+    return "Manrope";
+  }
+}
+function framiaSetTextFont(o) {
+  try {
+    localStorage.setItem("framia-text-font", String(o || "Manrope"));
+  } catch {}
 }
 function framiaRememberFont(o) {
   const d = [...new Set([...framiaInstalledFonts(), o])];
@@ -19043,6 +19063,7 @@ function Eu(o, d, v) {
               o.lineTo(d.points[1].x, d.points[1].y))
             : (o.moveTo(d.x, d.y), o.lineTo(d.x + d.w, d.y + d.h)),
       o.stroke());
+  else if (d.type === "extrude") framiaDrawExtrude(o, d);
   else if (d.type === "text") {
     const fSize = d.size || 64,
       fLines = String(d.text ?? "").split("\n"),
@@ -19278,6 +19299,14 @@ function cg() {
     [Tl, wu] = Y.useState(
       () => typeof window > "u" || window.innerWidth > 900,
     ),
+    [libOpen, setLibOpen] = Y.useState(
+      () => typeof window > "u" || window.innerWidth > 1180,
+    ),
+    [libTab, setLibTab] = Y.useState("media"),
+    [libQuery, setLibQuery] = Y.useState(""),
+    [libWidth, setLibWidth] = Y.useState(258),
+    [fontTick, setFontTick] = Y.useState(0),
+    [inspectorTab, setInspectorTab] = Y.useState("properties"),
     [Bi, Ho] = Y.useState(() => {
       try {
         return JSON.parse(localStorage.getItem("framia-themes")) || [];
@@ -19694,9 +19723,12 @@ function cg() {
     }, [z, Oa]),
     Y.useEffect(() => {
       if (!splash) return;
-      const timer = setTimeout(() => setSplash(!1), 2620);
+      const timer = setTimeout(() => setSplash(!1), 3680);
       return () => clearTimeout(timer);
     }, [splash]),
+    Y.useEffect(() => {
+      framiaRestoreFontFiles().then(() => setFontTick((value) => value + 1));
+    }, []),
     Y.useEffect(() => {
       (localStorage.setItem("framia-language", Me),
         (document.documentElement.lang = Me === "pt" ? "pt-BR" : Me));
@@ -19742,7 +19774,12 @@ function cg() {
     Y.useEffect(() => {
       if (!Mt || !settingsReady) return;
       const timer = setTimeout(() => {
-        gu("/api/settings", "PUT", { theme: ft, themes: Bi }).catch(() => {});
+        gu("/api/settings", "PUT", { theme: ft, themes: Bi }).catch(() =>
+          He(
+            "Tema não sincronizado",
+            "Ele continua salvo neste navegador.",
+          ),
+        );
       }, 700);
       return () => clearTimeout(timer);
     }, [ft, Bi, Mt, settingsReady]),
@@ -19875,7 +19912,7 @@ function cg() {
                 (sl.width = z.width),
                 (sl.height = z.height));
               let St = sl.getContext("2d");
-              for (let rn of ku) Eu(St, rn, R);
+              for (let rn of ku) Eu(St, framiaAnimated(rn, X), R);
               (Ea.current.set(Wi, sl),
                 Ea.current.size >
                   Math.max(
@@ -20071,6 +20108,54 @@ function cg() {
         return;
       }
       if (!ze) return;
+      if (pe === "extrude") {
+        if (Ue.locked || !Ue.visible) return;
+        const list = (z.content?.[ze.id]?.[ee]) || [],
+          hit = [...list]
+            .reverse()
+            .find((candidate) => candidate.type === "extrude" && Vp(candidate, s, 12));
+        if (hit) {
+          Wt.current = {
+            type: "turn3d",
+            start: s,
+            id: hit.id,
+            rx: hit.rx || 0,
+            ry: hit.ry || 0,
+            orig: { rx: hit.rx || 0, ry: hit.ry || 0 },
+            frameId: ze.id,
+            layerId: ee,
+          };
+          (tn([hit.id]), wu(!0), ve("properties"));
+          return;
+        }
+        const side = Math.round(Math.min(z.width, z.height) * 0.28),
+          el = {
+            id: Ke(),
+            type: "extrude",
+            x: Math.round(s.x - side / 2),
+            y: Math.round(s.y - side / 2),
+            w: side,
+            h: side,
+            depth: Math.round(side * 0.5),
+            rx: -18,
+            ry: 32,
+            color: (() => {
+              const rgb = framiaHexChannel(ct);
+              if (!rgb) return "#8b6df0";
+              const luma = (rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114) / 255;
+              return luma < 0.28 ? "#8b6df0" : ct;
+            })(),
+            opacity: 1,
+          };
+        (rl(ze.id, ee, [el]),
+          Ee(ee),
+          ia(el.id),
+          B({ ids: [el.id], box: jc([el]), frameId: ze.id, layerId: ee }),
+          rt({}),
+          wu(!0),
+          ve("properties"));
+        return;
+      }
       if (pe === "transform" || pe === "select") {
         if (Ue.locked || !Ue.visible) return;
         const tol = (() => {
@@ -20332,6 +20417,16 @@ function cg() {
         });
         return;
       }
+      if (h.type === "turn3d") {
+        const list = (bt.current.content?.[h.frameId]?.[h.layerId]) || [],
+          target = list.find((candidate) => candidate.id === h.id);
+        if (!target) return;
+        ((target.rx = Math.max(-89, Math.min(89, h.rx - (s.y - h.start.y) * 0.55))),
+          (target.ry = h.ry + (s.x - h.start.x) * 0.55),
+          Ea.current.clear(),
+          te({ ...bt.current }));
+        return;
+      }
       if (h.el.type === "shape")
         h.el = {
           ...h.el,
@@ -20361,6 +20456,27 @@ function cg() {
     an = () => {
       let i = Wt.current;
       if (i) {
+        if (
+          i.type === "turn3d" &&
+          ((Wt.current = null),
+          (() => {
+            const list =
+                (bt.current.content?.[i.frameId]?.[i.layerId]) || [],
+              target = list.find((candidate) => candidate.id === i.id);
+            if (!target) return;
+            const rx = target.rx,
+              ry = target.ry;
+            Object.assign(target, i.orig);
+            (De((next) => {
+              const found = (
+                (next.content[i.frameId] || {})[i.layerId] || []
+              ).find((candidate) => candidate.id === i.id);
+              found && ((found.rx = rx), (found.ry = ry));
+            }),
+              Ea.current.clear());
+          })())
+        )
+          return;
         if (((Wt.current = null), i.type === "marquee")) {
           if (q) {
             const picked = new Set(i.base || []),
@@ -22442,6 +22558,10 @@ function cg() {
       ["path", { d: "M12 20h9", key: "note-a" }],
       ["path", { d: "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z", key: "note-b" }],
     ]),
+    CubeIcon = de("Box", [
+      ["path", { d: "M12 3l8 4.6v8.8L12 21l-8-4.6V7.6L12 3Z", key: "c3d-a" }],
+      ["path", { d: "M12 12l8-4.4M12 12v9M12 12L4 7.6", key: "c3d-b" }],
+    ]),
     Lu = [
       [Cp, "transform", H.transform, "V"],
       [
@@ -22493,12 +22613,13 @@ function cg() {
         Me === "en" ? "Text" : Me === "es" ? "Texto" : "Texto",
         "T",
       ],
+      [CubeIcon, "extrude", "3D", "K"],
       [NoteIcon, "note", H.notes, "N"],
     ],
     railGroups = [
       ["transform", "pan"],
       ["brush", "eraser", "smudge", "fill", "pipette"],
-      ["line", "rect", "ellipse", "text"],
+      ["line", "rect", "ellipse", "extrude", "text"],
       ["note"],
     ],
     ma = 62 * It,
@@ -22831,6 +22952,371 @@ function cg() {
             accountLabels.signIn,
           );
     };
+  const selPrimary = mt[0] || null,
+    extrudeSel = mt.find((el) => el.type === "extrude") || null,
+    animClones = Y.useRef(new Set()),
+    patchSelection = (patch) => {
+      if (!M || !M.ids.length || !ze) return;
+      De((next) => {
+        const layers = (next.content[ze.id] ||= {}),
+          list = (layers[ee] ||= []);
+        for (const el of list) {
+          if (!M.ids.includes(el.id)) continue;
+          if (patch.opacity != null) el.opacity = patch.opacity;
+          if (patch.color) el.color = patch.color;
+          if (el.type === "extrude") {
+            if (patch.depth != null) el.depth = patch.depth;
+            if (patch.rx != null) el.rx = patch.rx;
+            if (patch.ry != null) el.ry = patch.ry;
+          }
+          if (
+            patch.x != null ||
+            patch.y != null ||
+            patch.scale != null ||
+            patch.rotate != null
+          ) {
+            const tr = { ...(el.transform || {}) };
+            if (patch.x != null) tr.x = patch.x;
+            if (patch.y != null) tr.y = patch.y;
+            if (patch.scale != null) {
+              tr.sx = patch.scale / 100;
+              tr.sy = patch.scale / 100;
+            }
+            if (patch.rotate != null) tr.rotation = patch.rotate;
+            el.transform = tr;
+          }
+        }
+      });
+      Ea.current.clear();
+    },
+    resetSelection = () => {
+      if (!M || !M.ids.length || !ze) return;
+      De((next) => {
+        const list = (next.content[ze.id] || {})[ee] || [];
+        for (const el of list)
+          if (M.ids.includes(el.id)) {
+            delete el.transform;
+            el.opacity = 1;
+          }
+      });
+      rt({});
+      Ea.current.clear();
+    },
+    animValue = (el, key) => {
+      if (key === "pos")
+        return { x: el.transform?.x || 0, y: el.transform?.y || 0 };
+      if (key === "scale") return el.transform?.sx ?? 1;
+      if (key === "rotate") return el.transform?.rotation || 0;
+      if (key === "opacity") return el.opacity ?? 1;
+      return el.color || "#222222";
+    },
+    toggleEvent = (key) => {
+      const el = selPrimary;
+      if (!el || !ze) return;
+      const frame = P,
+        origin = ze.id,
+        existing = Array.isArray(el.keys?.[key]) ? el.keys[key] : [],
+        removing = existing.some((event) => event.f === frame),
+        value = animValue(el, key);
+      if (!removing) animClones.current.add(origin);
+      De((next) => {
+        for (const item of next.frames) {
+          const layers = (next.content[item.id] ||= {}),
+            list = (layers[ee] ||= []);
+          let target = list.find((candidate) => candidate.id === el.id);
+          if (!target) {
+            if (removing) continue;
+            target = structuredClone(el);
+            target.animHome = origin;
+            list.push(target);
+          }
+          const keys = { ...(target.keys || {}) },
+            track = (Array.isArray(keys[key]) ? keys[key] : []).filter(
+              (event) => event.f !== frame,
+            );
+          if (!removing) {
+            track.push({ f: frame, v: value });
+            track.sort((a, b) => a.f - b.f);
+          }
+          keys[key] = track;
+          if (!track.length) delete keys[key];
+          if (Object.keys(keys).length) target.keys = keys;
+          else delete target.keys;
+          if (!removing && !existing.length) {
+            const base = { ...(target.transform || {}) };
+            if (key === "pos") ((base.x = 0), (base.y = 0));
+            if (key === "scale") ((base.sx = 1), (base.sy = 1));
+            if (key === "rotate") base.rotation = 0;
+            target.transform = base;
+            if (key === "opacity") target.opacity = 1;
+          }
+        }
+        const alive = next.frames.some((item) => {
+          const list = (next.content[item.id] || {})[ee] || [];
+          const found = list.find((candidate) => candidate.id === el.id);
+          return found && found.keys && Object.keys(found.keys).length;
+        });
+        if (!alive)
+          for (const item of next.frames) {
+            if (item.id === origin) continue;
+            const list = next.content[item.id]?.[ee];
+            if (!list) continue;
+            next.content[item.id][ee] = list.filter(
+              (candidate) => candidate.id !== el.id,
+            );
+          }
+      });
+      Ea.current.clear();
+      He(
+        removing ? "Evento removido" : "Evento criado",
+        `Quadro ${frame + 1}`,
+      );
+    },
+    clearEvents = () => {
+      const el = selPrimary;
+      if (!el) return;
+      De((next) => {
+        for (const item of next.frames) {
+          const list = next.content[item.id]?.[ee];
+          if (!list) continue;
+          const index = list.findIndex((candidate) => candidate.id === el.id);
+          if (index < 0) continue;
+          const found = list[index];
+          if (found.animHome && item.id !== found.animHome) {
+            list.splice(index, 1);
+            continue;
+          }
+          const clean = { ...found };
+          delete clean.keys;
+          delete clean.animHome;
+          delete clean.animStart;
+          list[index] = clean;
+        }
+      });
+      Ea.current.clear();
+    },
+    libResize = (event) => {
+      event.preventDefault();
+      const startX = event.clientX,
+        startWidth = libOpen ? libWidth : 0;
+      const move = (moveEvent) => {
+        const next = Rt(startWidth + moveEvent.clientX - startX, 0, 380);
+        setLibWidth(next);
+        setLibOpen(next > 40);
+      };
+      const stop = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", stop);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", stop);
+    },
+    openLibraryTab = (tab) => {
+      (setLibTab(tab), setLibOpen(!(libOpen && libTab === tab)));
+    },
+    libInsertMedia = (item) => {
+      if (!ze || Ue.locked || !Ue.visible) return;
+      const image = new Image();
+      image.onload = () => {
+        const max = Math.min(z.width, z.height) * 0.62,
+          ratio = Math.min(1, max / Math.max(image.width, image.height)),
+          w = image.width * ratio,
+          h = image.height * ratio,
+          el = {
+            id: Ke(),
+            type: "image",
+            src: item.url,
+            x: Math.round((z.width - w) / 2),
+            y: Math.round((z.height - h) / 2),
+            w: Math.round(w),
+            h: Math.round(h),
+            opacity: 1,
+          };
+        (rl(ze.id, ee, [el]),
+          Ee(ee),
+          ia(el.id),
+          B({
+            ids: [el.id],
+            box: jc([el]),
+            frameId: ze.id,
+            layerId: ee,
+          }),
+          rt({}),
+          he("transform"),
+          He("Imagem adicionada", item.name));
+      };
+      image.src = item.url;
+    },
+    libInsertShape = (kind) => {
+      if (!ze || Ue.locked || !Ue.visible) return;
+      const side = Math.min(z.width, z.height) * 0.32,
+        cx = (z.width - side) / 2,
+        cy = (z.height - side) / 2,
+        poly = framiaShapePoints(kind, side, side),
+        base = {
+          id: Ke(),
+          type: "shape",
+          x: Math.round(cx),
+          y: Math.round(cy),
+          w: Math.round(side),
+          h: Math.round(side),
+          color: ct || "#7c4bf0",
+          size: 6,
+          opacity: 1,
+        },
+        el = poly
+          ? {
+              ...base,
+              shape: "points",
+              points: poly.map((point) => ({
+                x: Math.round(cx + point.x),
+                y: Math.round(cy + point.y),
+              })),
+            }
+          : { ...base, shape: kind === "line" ? "line" : kind };
+      (rl(ze.id, ee, [el]),
+        Ee(ee),
+        ia(el.id),
+        B({ ids: [el.id], box: jc([el]), frameId: ze.id, layerId: ee }),
+        rt({}),
+        he("transform"));
+    },
+    libInsertText = (preset) => {
+      if (!ze || Ue.locked || !Ue.visible) return;
+      const el = framiaTextElement({
+        x: Math.round(z.width * 0.2),
+        y: Math.round(z.height * 0.42),
+        color: framiaTextHex(ct || "#222222"),
+        size: preset.size,
+        weight: preset.weight,
+        text: preset[Me] || preset.pt,
+        font: framiaTextFont(),
+      });
+      (rl(ze.id, ee, [el]),
+        Ee(ee),
+        ia(el.id),
+        B({ ids: [el.id], box: jc([el]), frameId: ze.id, layerId: ee }),
+        rt({}),
+        setTextId(el.id),
+        he("text"));
+    },
+    libFontUpload = () => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".ttf,.otf,.woff,.woff2,font/*";
+      input.onchange = async () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        try {
+          const family = await framiaInstallFontFile(file);
+          if (!family) return;
+          setFontTick((value) => value + 1);
+          He("Fonte instalada", family);
+        } catch {
+          He("Não foi possível instalar a fonte", file.name);
+        }
+      };
+      input.click();
+    },
+    libUseFont = (font) => {
+      framiaSetTextFont(font);
+      if (!M || !M.ids.length || !ze) return;
+      De((next) => {
+        const list = (next.content[ze.id] || {})[ee] || [];
+        for (const el of list)
+          if (M.ids.includes(el.id) && el.type === "text") {
+            el.font = font;
+            const metrics = framiaTextMetrics(el);
+            el.w = metrics.w;
+            el.h = metrics.h;
+          }
+      });
+      Ea.current.clear();
+    };
+
+  const libraryMedia = (() => {
+      const seen = new Set(),
+        out = [];
+      for (const frame of z.frames) {
+        const layers = z.content?.[frame.id] || {};
+        for (const layerId of Object.keys(layers))
+          for (const el of layers[layerId] || []) {
+            if (el.type !== "image" || !el.src) continue;
+            const key = `img-${el.src.length}-${el.src.slice(-36)}`;
+            if (seen.has(key)) continue;
+            (seen.add(key),
+              out.push({
+                id: key,
+                name: el.name || "Imagem",
+                kind: "image",
+                url: el.src,
+              }));
+          }
+      }
+      for (const clip of z.clips || []) {
+        if (clip.type !== "video") continue;
+        const url = ji[clip.mediaId] || clip.url;
+        if (!url) continue;
+        out.push({
+          id: clip.id,
+          name: clip.name || "Vídeo",
+          kind: "video",
+          url,
+        });
+      }
+      return out;
+    })(),
+    libraryFonts = (() => {
+      void fontTick;
+      return [...new Set([...FRAMIA_FONT_BASE, ...framiaInstalledFonts()])];
+    })(),
+    libraryLayersNode = r.createElement(
+      "div",
+      { className: "layer-list" },
+      z.layers.map((layer) =>
+        r.createElement(
+          "div",
+          {
+            key: layer.id,
+            className: `layer-row${layer.id === ee ? " selected" : ""}`,
+            onClick: () => Ee(layer.id),
+          },
+          r.createElement(
+            "span",
+            { className: "layer-thumb" },
+            r.createElement(Mi, { size: 14 }),
+          ),
+          r.createElement(
+            "span",
+            { className: "layer-info" },
+            r.createElement("b", null, layer.name || "Camada"),
+            r.createElement(
+              "small",
+              null,
+              layer.opacity !== 1
+                ? `${Math.round((layer.opacity ?? 1) * 100)}%`
+                : "Normal",
+            ),
+          ),
+          r.createElement(
+            "button",
+            {
+              title: layer.visible === false ? "Mostrar" : "Ocultar",
+              onClick: (event) => {
+                event.stopPropagation();
+                De((next) => {
+                  const found = next.layers.find((item) => item.id === layer.id);
+                  if (found) found.visible = found.visible === false;
+                });
+                Ea.current.clear();
+              },
+            },
+            layer.visible === false ? "○" : "●",
+          ),
+        ),
+      ),
+    );
+
   return Oa === "home"
     ? r.createElement(
         "div",
@@ -23243,11 +23729,11 @@ function cg() {
           onChange: async (i) => {
             let s = i.target.files[0];
             if (!s) return;
-            let h = await new Promise((y) => {
-              let R = new FileReader();
-              ((R.onload = () => y(R.result)), R.readAsDataURL(s));
-            });
-            Qa((y) => ({ ...y, background: h }));
+            i.target.value = "";
+            let url = await framiaUploadWallpaper(s);
+            if (!url) url = await framiaDownscaleImage(s, 1600, 0.82);
+            url &&
+              Qa((y) => ({ ...y, background: url, wallpaperName: s.name }));
           },
         }),
         r.createElement(
@@ -23403,6 +23889,31 @@ function cg() {
                       : "Salvando",
               ),
             ),
+            r.createElement(FramiaPresenceStack, {
+              members: (Vc || [])
+                .map((member) => ({
+                  ...member,
+                  isMe: !!Mt && member.userId === Mt.sub,
+                }))
+                .concat(
+                  nl && Mt && !(Vc || []).some((m) => m.userId === Mt.sub)
+                    ? [
+                        {
+                          connectionId: "self",
+                          name: profile?.displayName || Mt.name || "Você",
+                          avatar: profile?.avatar || Mt.picture || "",
+                          isMe: true,
+                        },
+                      ]
+                    : [],
+                ),
+              title:
+                Me === "en"
+                  ? "People in this room"
+                  : Me === "es"
+                    ? "Personas en la sala"
+                    : "Pessoas nesta sala",
+            }),
             renderAccountControl(),
             r.createElement("span", { className: "top-divider" }),
             r.createElement(
@@ -23484,6 +23995,30 @@ function cg() {
               ),
             ),
           ),
+          r.createElement(FramiaLibrary, {
+            lang: Me,
+            open: libOpen,
+            tab: libTab,
+            query: libQuery,
+            width: libWidth,
+            media: libraryMedia,
+            clips: z.clips,
+            fonts: libraryFonts,
+            activeFont: framiaTextFont(),
+            layersNode: libraryLayersNode,
+            onTab: openLibraryTab,
+            onToggle: () => setLibOpen(!libOpen),
+            onQuery: setLibQuery,
+            onResize: libResize,
+            onUpload: (kind) =>
+              (kind === "audio" ? qi : Fa).current.click(),
+            onInsertMedia: libInsertMedia,
+            onInsertShape: libInsertShape,
+            onInsertText: libInsertText,
+            onFontUpload: libFontUpload,
+            onUseFont: libUseFont,
+            onSelectClip: (id) => ta(id),
+          }),
           r.createElement(
             "main",
             { className: "main-area" },
@@ -24052,13 +24587,12 @@ function cg() {
                   "div",
                   { className: "brand-splash", "aria-hidden": "true" },
                   r.createElement("canvas", {
-                    className: "bs-canvas",
-                    ref: framiaIntroPaint,
+                    className: "bs-canvas bs-liquid",
+                    ref: framiaIntroLiquid,
                   }),
-                  r.createElement("img", {
-                    className: "bs-brush",
-                    src: "/brand/framia-brush.svg",
-                    alt: "",
+                  r.createElement("div", {
+                    className: "bs-stage2",
+                    "aria-hidden": "true",
                   }),
                   r.createElement(
                     "div",
@@ -24412,7 +24946,10 @@ function cg() {
                     },
                     r.createElement(D1, {
                       box: M == null ? void 0 : M.box,
-                      transform: $e,
+                      transform: {
+                        ...($e || {}),
+                        ...((M && selPrimary && framiaAnimOverlay(selPrimary, P)) || {}),
+                      },
                       scale: z.width / ((Math.min(1e3, z.width) * xe) / 100),
                       onStart: Hu,
                       onMove: $a,
@@ -24426,6 +24963,16 @@ function cg() {
                         width: q.w,
                         height: q.h,
                       }),
+                  ),
+                pe === "extrude" &&
+                  extrudeSel &&
+                  r.createElement(
+                    "svg",
+                    {
+                      className: "transform-overlay gz3d",
+                      viewBox: `0 0 ${z.width} ${z.height}`,
+                    },
+                    r.createElement(FramiaGizmo, { element: extrudeSel }),
                   ),
                 r.createElement(
                   "svg",
@@ -24487,7 +25034,19 @@ function cg() {
                     className: ie === "properties" ? "active" : "",
                     onClick: () => ve("properties"),
                   },
-                  H.brush,
+                  Me === "en"
+                    ? "Properties"
+                    : Me === "es"
+                      ? "Propiedades"
+                      : "Propriedades",
+                ),
+                r.createElement(
+                  "button",
+                  {
+                    className: ie === "anim" ? "active" : "",
+                    onClick: () => ve("anim"),
+                  },
+                  Me === "en" ? "Animation" : Me === "es" ? "Animación" : "Animação",
                 ),
                 r.createElement(
                   "button",
@@ -24498,10 +25057,49 @@ function cg() {
                   H.layers,
                 ),
               ),
-              ie === "properties"
+              ie === "anim"
                 ? r.createElement(
                     "div",
                     { className: "panel-scroll" },
+                    r.createElement(FramiaAnimPanel, {
+                      lang: Me,
+                      element: selPrimary,
+                      frame: P,
+                      total: z.frames.length,
+                      onToggle: toggleEvent,
+                      onClear: clearEvents,
+                      onSeek: (index) => {
+                        const frame = z.frames[index];
+                        frame && F(frame.start / z.fps);
+                      },
+                    }),
+                  )
+                : ie === "properties"
+                ? r.createElement(
+                    "div",
+                    { className: "panel-scroll" },
+                    M &&
+                      selPrimary &&
+                      r.createElement(FramiaTransformPanel, {
+                        lang: Me,
+                        values: {
+                          x: selPrimary.transform?.x || 0,
+                          y: selPrimary.transform?.y || 0,
+                          scale: (selPrimary.transform?.sx ?? 1) * 100,
+                          rotate: selPrimary.transform?.rotation || 0,
+                          opacity: selPrimary.opacity ?? 1,
+                        },
+                        color:
+                          selPrimary.type === "shape" ||
+                          selPrimary.type === "text" ||
+                          selPrimary.type === "extrude"
+                            ? selPrimary.color
+                            : "",
+                        extrude:
+                          selPrimary.type === "extrude" ? selPrimary : null,
+                        onChange: patchSelection,
+                        onReset: resetSelection,
+                      }),
                     r.createElement(
                       "section",
                       { className: "inspector-section" },
@@ -27241,7 +27839,9 @@ function cg() {
                                                 Qa({
                                                   ...framiaThemeDefaults(),
                                                   ...theme,
-                                                  background: ft.background,
+                                                  background:
+                                                    theme.background ||
+                                                    ft.background,
                                                   paperMedia: ft.paperMedia,
                                                 }),
                                             },
@@ -27900,4 +28500,1049 @@ function FramiaColorPicker({ value, onChange, label, className }) {
     ref: host,
     className: className ? `fc-host ${className}` : "fc-host",
   });
+}
+
+/* Theme wallpaper: goes to R2 so the setting stays tiny and syncs across
+   devices instead of blowing the localStorage quota. --------------------- */
+async function framiaUploadWallpaper(file) {
+  try {
+    const response = await fetch("/api/wallpaper", {
+      method: "POST",
+      headers: { "Content-Type": file.type || "image/png" },
+      body: file,
+    });
+    if (!response.ok) return "";
+    const data = await response.json();
+    return (data && data.wallpaper && data.wallpaper.url) || "";
+  } catch {
+    return "";
+  }
+}
+
+function framiaDownscaleImage(file, max, quality = 0.82) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(1, max / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.width * ratio));
+      canvas.height = Math.max(1, Math.round(img.height * ratio));
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      try {
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      } catch {
+        resolve("");
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve("");
+    };
+    img.src = url;
+  });
+}
+
+/* ====================================================================== *
+ * Framia shell pieces: library drawer, presence, inspector extras, fake 3D
+ * ====================================================================== */
+
+const FRAMIA_ANIM_PROPS = [
+  { key: "pos", pt: "Posição", en: "Position", es: "Posición" },
+  { key: "scale", pt: "Escala", en: "Scale", es: "Escala" },
+  { key: "rotate", pt: "Rotação", en: "Rotation", es: "Rotación" },
+  { key: "opacity", pt: "Opacidade", en: "Opacity", es: "Opacidad" },
+  { key: "color", pt: "Cor", en: "Color", es: "Color" },
+];
+function framiaAnimLabel(prop, lang) {
+  return prop[lang] || prop.pt;
+}
+function framiaHexChannel(hex) {
+  const value = String(hex || "").replace("#", "");
+  if (value.length !== 6) return null;
+  return [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16));
+}
+function framiaMixColor(a, b, t) {
+  const ca = framiaHexChannel(a),
+    cb = framiaHexChannel(b);
+  if (!ca || !cb) return t < 0.5 ? a : b;
+  const mix = ca.map((v, i) => Math.round(v + (cb[i] - v) * t));
+  return "#" + mix.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+/** Linear sampling of a keyframe track at a frame index. */
+function framiaAnimSample(track, frame) {
+  if (!Array.isArray(track) || !track.length) return null;
+  if (track.length === 1) return track[0].v;
+  if (frame <= track[0].f) return track[0].v;
+  if (frame >= track[track.length - 1].f) return track[track.length - 1].v;
+  for (let i = 1; i < track.length; i++) {
+    const a = track[i - 1],
+      b = track[i];
+    if (frame > b.f) continue;
+    const span = b.f - a.f || 1,
+      t = (frame - a.f) / span;
+    if (typeof a.v === "string" && typeof b.v === "string")
+      return framiaMixColor(a.v, b.v, t);
+    return a.v + (b.v - a.v) * t;
+  }
+  return track[track.length - 1].v;
+}
+/** Copy of an element with its keyframe events applied at `frame`. */
+function framiaAnimOverlay(el, frame) {
+  const keys = el && el.keys;
+  if (!keys) return null;
+  const out = {};
+  const pos = keys.pos && framiaAnimSample(keys.pos, frame);
+  const scale = keys.scale && framiaAnimSample(keys.scale, frame);
+  const rotate = keys.rotate && framiaAnimSample(keys.rotate, frame);
+  if (pos) {
+    out.x = pos.x;
+    out.y = pos.y;
+  }
+  if (scale != null) {
+    out.sx = scale;
+    out.sy = scale;
+  }
+  if (rotate != null) out.rotation = rotate;
+  return out;
+}
+function framiaAnimated(el, frame) {
+  const keys = el && el.keys;
+  if (!keys) return el;
+  const out = { ...el };
+  const pos = keys.pos && framiaAnimSample(keys.pos, frame);
+  const scale = keys.scale && framiaAnimSample(keys.scale, frame);
+  const rotate = keys.rotate && framiaAnimSample(keys.rotate, frame);
+  const opacity = keys.opacity && framiaAnimSample(keys.opacity, frame);
+  const color = keys.color && framiaAnimSample(keys.color, frame);
+  if (pos || scale != null || rotate != null) {
+    const tr = { ...(el.transform || {}) };
+    if (pos) {
+      tr.x = (tr.x || 0) + pos.x;
+      tr.y = (tr.y || 0) + pos.y;
+    }
+    if (scale != null) {
+      tr.sx = (tr.sx ?? 1) * scale;
+      tr.sy = (tr.sy ?? 1) * scale;
+    }
+    if (rotate != null) tr.rotation = (tr.rotation || 0) + rotate;
+    out.transform = tr;
+  }
+  if (opacity != null) out.opacity = (el.opacity ?? 1) * opacity;
+  if (color) out.color = color;
+  return out;
+}
+
+/* Fake 3D: a flat box rotated in space and shaded per face -------------- */
+function framiaExtrudeGeometry(el) {
+  const w = Math.max(1, el.w || 200),
+    h = Math.max(1, el.h || 200),
+    d = Math.max(1, el.depth || 80);
+  const rx = ((el.rx || 0) * Math.PI) / 180,
+    ry = ((el.ry || 0) * Math.PI) / 180;
+  const cx = (el.x || 0) + w / 2,
+    cy = (el.y || 0) + h / 2,
+    focal = Math.max(w, h) * 2.4;
+  const project = (px, py, pz) => {
+    let x = px,
+      y = py,
+      z = pz;
+    let t = x * Math.cos(ry) + z * Math.sin(ry);
+    z = -x * Math.sin(ry) + z * Math.cos(ry);
+    x = t;
+    t = y * Math.cos(rx) - z * Math.sin(rx);
+    z = y * Math.sin(rx) + z * Math.cos(rx);
+    y = t;
+    const s = focal / (focal - z);
+    return { x: cx + x * s, y: cy + y * s, z };
+  };
+  const hw = w / 2,
+    hh = h / 2,
+    hd = d / 2;
+  const p = [
+    project(-hw, -hh, -hd),
+    project(hw, -hh, -hd),
+    project(hw, hh, -hd),
+    project(-hw, hh, -hd),
+    project(-hw, -hh, hd),
+    project(hw, -hh, hd),
+    project(hw, hh, hd),
+    project(-hw, hh, hd),
+  ];
+  const faces = [
+    { idx: [0, 1, 2, 3], shade: 1.12, front: true },
+    { idx: [5, 4, 7, 6], shade: 0.72 },
+    { idx: [4, 0, 3, 7], shade: 0.86 },
+    { idx: [1, 5, 6, 2], shade: 0.62 },
+    { idx: [3, 2, 6, 7], shade: 0.95 },
+    { idx: [4, 5, 1, 0], shade: 0.55 },
+  ].map((face) => {
+    const pts = face.idx.map((i) => p[i]);
+    const depth = pts.reduce((sum, pt) => sum + pt.z, 0) / pts.length;
+    return { ...face, pts, depth };
+  });
+  faces.sort((a, b) => a.depth - b.depth);
+  return { points: p, faces, cx, cy };
+}
+function framiaShadeColor(hex, amount) {
+  const rgb = framiaHexChannel(hex) || [124, 75, 240];
+  const out = rgb.map((v) =>
+    Math.max(0, Math.min(255, Math.round(amount >= 1 ? v * amount : v * amount))),
+  );
+  return `rgb(${out[0]},${out[1]},${out[2]})`;
+}
+function framiaDrawExtrude(ctx, el) {
+  const geo = framiaExtrudeGeometry(el);
+  const base = el.color || "#7c4bf0";
+  for (const face of geo.faces) {
+    ctx.beginPath();
+    face.pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
+    ctx.closePath();
+    ctx.fillStyle = framiaShadeColor(base, face.shade);
+    ctx.fill();
+    ctx.strokeStyle = face.front ? "#2a1660" : "rgba(26,14,58,0.55)";
+    ctx.lineWidth = face.front ? 2 : 1.2;
+    ctx.stroke();
+  }
+  if (el.gizmo) {
+    const arms = [
+      [1.35, 0, 0, "#ff5d6c"],
+      [0, 1.35, 0, "#5ce07b"],
+      [0, 0, 1.35, "#4b9dff"],
+    ];
+    ctx.save();
+    ctx.lineCap = "round";
+    for (const [ax, ay, az, color] of arms) {
+      const cx = geo.cx,
+        cy = geo.cy,
+        len = Math.max(el.w || 200, el.h || 200) * 0.72;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      const rx = ((el.rx || 0) * Math.PI) / 180,
+        ry = ((el.ry || 0) * Math.PI) / 180;
+      const px = ax * len,
+        py = ay * len,
+        pz = az * len;
+      let X = px * Math.cos(ry) + pz * Math.sin(ry);
+      let Z = -px * Math.sin(ry) + pz * Math.cos(ry);
+      let Y = py * Math.cos(rx) - Z * Math.sin(rx);
+      Z = py * Math.sin(rx) + Z * Math.cos(rx);
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + X, cy + Y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.75;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(geo.cx, geo.cy, Math.max(el.w || 200, el.h || 200) * 0.62, Math.max(el.w || 200, el.h || 200) * 0.62 * Math.abs(Math.cos(((el.rx || 0) * Math.PI) / 180)), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* Local font files: install once, available everywhere afterwards ------ */
+const FRAMIA_FONT_FILE_KEY = "framia-font-files";
+function framiaFontFileList() {
+  try {
+    const list = JSON.parse(localStorage.getItem(FRAMIA_FONT_FILE_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+function framiaForgetFontFile(family) {
+  const next = framiaFontFileList().filter((item) => item.family !== family);
+  try {
+    localStorage.setItem(FRAMIA_FONT_FILE_KEY, JSON.stringify(next));
+  } catch {}
+}
+async function framiaInstallFontFile(file) {
+  if (!file) return "";
+  const family =
+    (file.name || "Fonte local")
+      .replace(/\.[^.]+$/, "")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 48) || "Fonte local";
+  const buffer = await file.arrayBuffer();
+  const face = new FontFace(family, buffer);
+  await face.load();
+  document.fonts.add(face);
+  try {
+    await xo("font:" + family.toLowerCase(), buffer);
+  } catch {}
+  const list = framiaFontFileList().filter((item) => item.family !== family);
+  list.push({ family, createdAt: Date.now() });
+  try {
+    localStorage.setItem(FRAMIA_FONT_FILE_KEY, JSON.stringify(list));
+  } catch {}
+  framiaRememberFont(family);
+  return family;
+}
+async function framiaRestoreFontFiles() {
+  for (const item of framiaFontFileList()) {
+    if (!item || !item.family) continue;
+    if ([...document.fonts].some((face) => face.family === item.family)) continue;
+    try {
+      const buffer = await pm("font:" + item.family.toLowerCase());
+      if (!buffer) continue;
+      const face = new FontFace(item.family, buffer);
+      await face.load();
+      document.fonts.add(face);
+    } catch {}
+  }
+}
+
+/* Presence: avatars of everyone in the room ---------------------------- */
+function framiaInitials(name) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return "?";
+  return (parts[0][0] + (parts[1] ? parts[1][0] : "")).toUpperCase();
+}
+function FramiaPresenceStack(props) {
+  const members = props.members || [];
+  if (!members.length) return null;
+  const shown = members.slice(0, 5);
+  return r.createElement(
+    "div",
+    { className: "presence-stack", title: props.title },
+    shown.map((member, index) =>
+      r.createElement(
+        "span",
+        {
+          key: member.connectionId || member.userId || index,
+          className: `presence-avatar${member.isMe ? " me" : ""}`,
+          title: member.name || member.username || "Colaborador",
+        },
+        member.avatar
+          ? r.createElement("img", { src: member.avatar, alt: "" })
+          : framiaInitials(member.name || member.username),
+      ),
+    ),
+    members.length > shown.length &&
+      r.createElement(
+        "span",
+        { className: "presence-more" },
+        "+",
+        members.length - shown.length,
+      ),
+  );
+}
+
+/* Library drawer ------------------------------------------------------ */
+const FRAMIA_SHAPES = [
+  { kind: "rect", pt: "Retângulo", en: "Rectangle", es: "Rectángulo" },
+  { kind: "ellipse", pt: "Elipse", en: "Ellipse", es: "Elipse" },
+  { kind: "line", pt: "Linha", en: "Line", es: "Línea" },
+  { kind: "triangle", pt: "Triângulo", en: "Triangle", es: "Triángulo" },
+  { kind: "star", pt: "Estrela", en: "Star", es: "Estrella" },
+  { kind: "arrow", pt: "Seta", en: "Arrow", es: "Flecha" },
+];
+const FRAMIA_TEXT_PRESETS = [
+  { pt: "Título", en: "Title", es: "Título", size: 132, weight: 800 },
+  { pt: "Subtítulo", en: "Subtitle", es: "Subtítulo", size: 76, weight: 700 },
+  { pt: "Corpo", en: "Body", es: "Cuerpo", size: 48, weight: 500 },
+  { pt: "Legenda", en: "Caption", es: "Leyenda", size: 32, weight: 500 },
+];
+/** Closed polygon (first point repeated) for the library shape presets. */
+function framiaShapePoints(kind, w, h) {
+  const cx = w / 2,
+    cy = h / 2,
+    radius = Math.min(w, h) / 2;
+  const ring = (count, inner) => {
+    const points = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count - Math.PI / 2;
+      const r = inner && i % 2 ? radius * 0.45 : radius;
+      points.push({ x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r });
+    }
+    points.push(points[0]);
+    return points;
+  };
+  if (kind === "triangle") return ring(3, false);
+  if (kind === "star") return ring(10, true);
+  if (kind === "arrow") {
+    const points = [
+      { x: 0, y: h * 0.32 },
+      { x: w * 0.62, y: h * 0.32 },
+      { x: w * 0.62, y: 0 },
+      { x: w, y: h / 2 },
+      { x: w * 0.62, y: h },
+      { x: w * 0.62, y: h * 0.68 },
+      { x: 0, y: h * 0.68 },
+    ];
+    points.push(points[0]);
+    return points;
+  }
+  return null;
+}
+function FramiaLibrary(props) {
+  const p = props;
+  const lang = p.lang || "pt";
+  const label = (pt, en, es) => (lang === "en" ? en : lang === "es" ? es : pt);
+  const tabs = [
+    { id: "media", pt: "Mídia", en: "Media", es: "Medios", icon: "M4 5h16v14H4z" },
+    { id: "elements", pt: "Elementos", en: "Elements", es: "Elementos", icon: "M12 3l9 6-9 6-9-6z" },
+    { id: "text", pt: "Texto", en: "Text", es: "Texto", icon: "M5 6h14M12 6v13M9 19h6" },
+    { id: "audio", pt: "Áudio", en: "Audio", es: "Audio", icon: "M11 5v14l8-7z" },
+    { id: "layers", pt: "Camadas", en: "Layers", es: "Capas", icon: "M12 4l8 4-8 4-8-4zM4 12l8 4 8-4" },
+  ];
+  const active = tabs.find((tab) => tab.id === p.tab) || tabs[0];
+  const media = p.media || [];
+  const query = (p.query || "").toLowerCase();
+  const filtered = media.filter((item) =>
+    !query || String(item.name || "").toLowerCase().includes(query),
+  );
+  const shapes = FRAMIA_SHAPES.filter(
+    (shape) =>
+      !query ||
+      (shape[lang] || shape.pt).toLowerCase().includes(query),
+  );
+  return r.createElement(
+    "aside",
+    {
+      className: `library${p.open ? "" : " closed"}`,
+      style: { "--lib-w": `${p.width || 260}px` },
+    },
+    r.createElement(
+      "div",
+      { className: "lib-strip" },
+      tabs.map((tab) =>
+        r.createElement(
+          "button",
+          {
+            key: tab.id,
+            className: p.open && p.tab === tab.id ? "active" : "",
+            onClick: () => p.onTab(tab.id),
+            title: tab[lang] || tab.pt,
+          },
+          r.createElement(
+            "svg",
+            {
+              viewBox: "0 0 24 24",
+              fill: "none",
+              stroke: "currentColor",
+              strokeWidth: "1.7",
+              strokeLinecap: "round",
+              strokeLinejoin: "round",
+            },
+            r.createElement("path", { d: tab.icon }),
+          ),
+          r.createElement("span", null, tab[lang] || tab.pt),
+        ),
+      ),
+      r.createElement("span", { className: "lib-strip-gap" }),
+    ),
+    r.createElement(
+      "div",
+      { className: "lib-body" },
+      r.createElement(
+        "div",
+        { className: "lib-head" },
+        r.createElement("b", null, active[lang] || active.pt),
+        r.createElement(
+          "button",
+          { onClick: p.onToggle, title: label("Recolher", "Collapse", "Contraer") },
+          r.createElement(
+            "svg",
+            { viewBox: "0 0 24 24", width: 15, height: 15, fill: "none", stroke: "currentColor", strokeWidth: "2" },
+            r.createElement("path", { d: "M15 6l-6 6 6 6" }),
+          ),
+        ),
+      ),
+      (p.tab === "media" || p.tab === "audio") &&
+        r.createElement(
+          "button",
+          {
+            className: "lib-upload",
+            onClick: () => p.onUpload(p.tab === "audio" ? "audio" : "image"),
+          },
+          r.createElement(
+            "svg",
+            { viewBox: "0 0 24 24", width: 15, height: 15, fill: "none", stroke: "currentColor", strokeWidth: "2" },
+            r.createElement("path", { d: "M12 16V4m0 0l-4 4m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" }),
+          ),
+          label("Fazer upload", "Upload", "Subir archivo"),
+        ),
+      r.createElement(
+        "div",
+        { className: "lib-search" },
+        r.createElement(
+          "svg",
+          { viewBox: "0 0 24 24", width: 14, height: 14, fill: "none", stroke: "currentColor", strokeWidth: "2" },
+          r.createElement("circle", { cx: 11, cy: 11, r: 7 }),
+          r.createElement("path", { d: "M20 20l-3.5-3.5" }),
+        ),
+        r.createElement("input", {
+          value: p.query || "",
+          placeholder: label("Pesquisar na biblioteca…", "Search library…", "Buscar en la biblioteca…"),
+          onChange: (event) => p.onQuery(event.target.value),
+        }),
+      ),
+      r.createElement(
+        "div",
+        { className: "lib-scroll" },
+        p.tab === "media" &&
+          (filtered.length
+            ? r.createElement(
+                "div",
+                { className: "lib-grid" },
+                filtered.map((item) =>
+                  r.createElement(
+                    "button",
+                    {
+                      key: item.id,
+                      className: "lib-item",
+                      title: item.name,
+                      onClick: () => p.onInsertMedia(item),
+                    },
+                    item.kind === "video"
+                      ? r.createElement("video", {
+                          src: item.url,
+                          muted: true,
+                          preload: "metadata",
+                          playsInline: true,
+                        })
+                      : r.createElement("img", { src: item.url, alt: "" }),
+                    r.createElement("span", null, item.name),
+                  ),
+                ),
+              )
+            : r.createElement(
+                "div",
+                { className: "lib-empty" },
+                label(
+                  "Nada aqui ainda. Faça upload de uma imagem para começar.",
+                  "Nothing here yet. Upload an image to start.",
+                  "Nada aquí todavía. Sube una imagen para empezar.",
+                ),
+              )),
+        p.tab === "elements" &&
+          r.createElement(
+            "div",
+            { className: "lib-shapes" },
+            shapes.map((shape) =>
+              r.createElement(
+                "button",
+                {
+                  key: shape.kind,
+                  className: "lib-shape",
+                  onClick: () => p.onInsertShape(shape.kind),
+                  title: shape[lang] || shape.pt,
+                },
+                r.createElement("i", null, shape.kind[0].toUpperCase()),
+                r.createElement("span", null, shape[lang] || shape.pt),
+              ),
+            ),
+          ),
+        p.tab === "text" &&
+          r.createElement(
+            r.Fragment,
+            null,
+            FRAMIA_TEXT_PRESETS.map((preset) =>
+              r.createElement(
+                "button",
+                {
+                  key: preset.size,
+                  className: "lib-text-preset",
+                  onClick: () => p.onInsertText(preset),
+                },
+                r.createElement(
+                  "b",
+                  { style: { fontSize: `${Math.max(13, preset.size / 6)}px` } },
+                  preset[lang] || preset.pt,
+                ),
+                r.createElement("small", null, `${preset.size} px`),
+              ),
+            ),
+            r.createElement(
+              "div",
+              { className: "section-heading", style: { marginTop: 6 } },
+              r.createElement(
+                "span",
+                null,
+                label("Fontes", "Fonts", "Fuentes"),
+              ),
+              r.createElement(
+                "button",
+                { className: "text-link", onClick: p.onFontUpload },
+                label("＋ Instalar", "＋ Install", "＋ Instalar"),
+              ),
+            ),
+            (p.fonts || []).map((font) =>
+              r.createElement(
+                "button",
+                {
+                  key: font,
+                  className: "lib-font",
+                  onClick: () => p.onUseFont(font),
+                  title: label("Usar esta fonte", "Use this font", "Usar esta fuente"),
+                },
+                r.createElement("span", { style: { fontFamily: `"${font}", sans-serif` } }, font),
+                r.createElement(
+                  "small",
+                  null,
+                  p.activeFont === font ? label("em uso", "in use", "en uso") : "",
+                ),
+              ),
+            ),
+          ),
+        p.tab === "audio" &&
+          ((p.clips || []).filter((clip) => clip.type === "audio").length
+            ? (p.clips || [])
+                .filter((clip) => clip.type === "audio")
+                .map((clip) =>
+                  r.createElement(
+                    "button",
+                    {
+                      key: clip.id,
+                      className: "lib-font",
+                      onClick: () => p.onSelectClip(clip.id),
+                    },
+                    r.createElement("span", null, clip.name || "Áudio"),
+                    r.createElement("small", null, `${Math.round(clip.duration)}s`),
+                  ),
+                )
+            : r.createElement(
+                "div",
+                { className: "lib-empty" },
+                label(
+                  "Nenhum áudio importado.",
+                  "No audio imported yet.",
+                  "Ningún audio importado.",
+                ),
+              )),
+        p.tab === "layers" && p.layersNode,
+      ),
+    ),
+    r.createElement(
+      "button",
+      {
+        className: "lib-handle",
+        title: label("Arraste para abrir ou fechar", "Drag to open or close", "Arrastra para abrir o cerrar"),
+        onPointerDown: p.onResize,
+      },
+      "⇔",
+    ),
+  );
+}
+
+/* Inspector: transform fields ----------------------------------------- */
+function FramiaTransformPanel(props) {
+  const p = props;
+  const lang = p.lang || "pt";
+  const label = (pt, en, es) => (lang === "en" ? en : lang === "es" ? es : pt);
+  const values = p.values || {};
+  const field = (key, prefix, step, suffix) =>
+    r.createElement(
+      "label",
+      { className: "prop-field" },
+      r.createElement("span", null, prefix),
+      r.createElement("input", {
+        type: "number",
+        value: Number.isFinite(values[key]) ? Math.round(values[key]) : 0,
+        step,
+        onChange: (event) => {
+          const next = Number(event.target.value);
+          Number.isFinite(next) && p.onChange({ [key]: next });
+        },
+      }),
+      suffix && r.createElement("span", null, suffix),
+    );
+  return r.createElement(
+    "section",
+    { className: "inspector-section" },
+    r.createElement(
+      "div",
+      { className: "section-heading" },
+      r.createElement("span", null, label("Transformar", "Transform", "Transformar")),
+      r.createElement(
+        "button",
+        { className: "text-link", onClick: p.onReset },
+        label("Redefinir", "Reset", "Restablecer"),
+      ),
+    ),
+    r.createElement(
+      "div",
+      { className: "prop-grid" },
+      r.createElement("span", { className: "prop-label" }, label("Posição", "Position", "Posición")),
+      field("x", "X", 1),
+      field("y", "Y", 1),
+      r.createElement("span"),
+      r.createElement("span", { className: "prop-label" }, label("Escala", "Scale", "Escala")),
+      field("scale", "×", 1, "%"),
+      field("rotate", "∠", 1, "°"),
+      r.createElement("span"),
+    ),
+    r.createElement(
+      "div",
+      { className: "prop-row" },
+      r.createElement("span", null, label("Opacidade", "Opacity", "Opacidad")),
+      r.createElement(
+        "div",
+        { className: "prop-slider" },
+        r.createElement("input", {
+          type: "range",
+          min: "0",
+          max: "100",
+          value: Math.round((values.opacity ?? 1) * 100),
+          onChange: (event) => p.onChange({ opacity: +event.target.value / 100 }),
+        }),
+        r.createElement("b", null, Math.round((values.opacity ?? 1) * 100), "%"),
+      ),
+    ),
+    p.color &&
+      r.createElement(
+        "div",
+        { className: "prop-row" },
+        r.createElement("span", null, label("Cor", "Color", "Color")),
+        r.createElement(
+          "div",
+          { className: "prop-slider" },
+          r.createElement("input", {
+            type: "color",
+            value: /^#[0-9a-f]{6}$/i.test(p.color) ? p.color : "#7c4bf0",
+            onChange: (event) => p.onChange({ color: event.target.value }),
+            style: { height: 26, width: 46, border: 0, background: "none" },
+          }),
+        ),
+      ),
+    p.extrude &&
+      r.createElement(
+        r.Fragment,
+        null,
+        r.createElement(
+          "div",
+          { className: "prop-row" },
+          r.createElement("span", null, label("Profundidade 3D", "3D depth", "Profundidad 3D")),
+          r.createElement(
+            "div",
+            { className: "prop-slider" },
+            r.createElement("input", {
+              type: "range",
+              min: "1",
+              max: "600",
+              value: Math.round(p.extrude.depth || 80),
+              onChange: (event) => p.onChange({ depth: +event.target.value }),
+            }),
+            r.createElement("b", null, Math.round(p.extrude.depth || 80)),
+          ),
+        ),
+        r.createElement(
+          "div",
+          { className: "prop-row" },
+          r.createElement("span", null, label("Girar X / Y", "Rotate X / Y", "Girar X / Y")),
+          r.createElement(
+            "div",
+            { className: "prop-slider" },
+            r.createElement("input", {
+              type: "range",
+              min: "-180",
+              max: "180",
+              value: Math.round(p.extrude.rx || 0),
+              onChange: (event) => p.onChange({ rx: +event.target.value }),
+            }),
+            r.createElement(
+              "b",
+              null,
+              Math.round(p.extrude.rx || 0),
+              "°",
+            ),
+          ),
+        ),
+        r.createElement(
+          "div",
+          { className: "prop-row" },
+          r.createElement("span"),
+          r.createElement(
+            "div",
+            { className: "prop-slider" },
+            r.createElement("input", {
+              type: "range",
+              min: "-180",
+              max: "180",
+              value: Math.round(p.extrude.ry || 0),
+              onChange: (event) => p.onChange({ ry: +event.target.value }),
+            }),
+            r.createElement(
+              "b",
+              null,
+              Math.round(p.extrude.ry || 0),
+              "°",
+            ),
+          ),
+        ),
+      ),
+  );
+}
+
+/* Inspector: events (keyframes) per property -------------------------- */
+function FramiaAnimPanel(props) {
+  const p = props;
+  const lang = p.lang || "pt";
+  const label = (pt, en, es) => (lang === "en" ? en : lang === "es" ? es : pt);
+  const total = Math.max(2, p.total || 2);
+  const frame = Math.max(0, p.frame || 0);
+  const keys = (p.element && p.element.keys) || {};
+  const rows = FRAMIA_ANIM_PROPS.map((prop) => {
+    const track = Array.isArray(keys[prop.key]) ? keys[prop.key] : [];
+    const active = track.some((event) => event.f === frame);
+    return r.createElement(
+      "div",
+      { key: prop.key, className: "kf-row" },
+      r.createElement("span", null, framiaAnimLabel(prop, lang)),
+      r.createElement(
+        "div",
+        { className: "kf-track" },
+        track.map((event) =>
+          r.createElement("i", {
+            key: event.f,
+            className: event.f === frame ? "on" : "",
+            style: { left: `${(event.f / (total - 1)) * 100}%` },
+            title: `${label("quadro", "frame", "fotograma")} ${event.f + 1}`,
+            onClick: () => p.onSeek && p.onSeek(event.f),
+          }),
+        ),
+      ),
+      r.createElement(
+        "button",
+        {
+          className: `kf-dot${active ? " on" : ""}`,
+          title: active
+            ? label("Remover evento", "Remove event", "Quitar evento")
+            : label("Criar evento neste quadro", "Add event here", "Crear evento aquí"),
+          onClick: () => p.onToggle(prop.key),
+        },
+        "◆",
+      ),
+    );
+  });
+  return r.createElement(
+    "section",
+    { className: "inspector-section" },
+    r.createElement(
+      "div",
+      { className: "section-heading" },
+      r.createElement("span", null, label("Eventos", "Events", "Eventos")),
+      r.createElement(
+        "button",
+        { className: "text-link", onClick: p.onClear },
+        label("Limpar", "Clear", "Limpiar"),
+      ),
+    ),
+    r.createElement(
+      "p",
+      { className: "anim-hint" },
+      p.element
+        ? label(
+            `Quadro ${frame + 1} de ${total}. O ◆ cria um evento com o valor atual; dois eventos animam a propriedade.`,
+            `Frame ${frame + 1} of ${total}. ◆ adds an event with the current value; two events animate the property.`,
+            `Fotograma ${frame + 1} de ${total}. ◆ crea un evento con el valor actual; dos eventos animan la propiedad.`,
+          )
+        : label(
+            "Selecione um elemento para animar.",
+            "Select an element to animate it.",
+            "Selecciona un elemento para animarlo.",
+          ),
+    ),
+    p.element && r.createElement("div", { className: "kf-list" }, rows),
+  );
+}
+
+/* 3D gizmo drawn as SVG over the canvas ------------------------------- */
+function FramiaGizmo(props) {
+  const el = props.element;
+  if (!el) return null;
+  const len = Math.max(el.w || 200, el.h || 200) * 0.72;
+  const cx = (el.x || 0) + (el.w || 0) / 2,
+    cy = (el.y || 0) + (el.h || 0) / 2;
+  const rx = ((el.rx || 0) * Math.PI) / 180,
+    ry = ((el.ry || 0) * Math.PI) / 180;
+  const project = (px, py, pz) => {
+    let x = px * Math.cos(ry) + pz * Math.sin(ry);
+    let z = -px * Math.sin(ry) + pz * Math.cos(ry);
+    const y = py * Math.cos(rx) - z * Math.sin(rx);
+    z = py * Math.sin(rx) + z * Math.cos(rx);
+    return { x: cx + x, y: cy + y, z };
+  };
+  const axes = [
+    { color: "#ff5d6c", end: project(len, 0, 0) },
+    { color: "#5ce07b", end: project(0, len, 0) },
+    { color: "#4b9dff", end: project(0, 0, len) },
+  ];
+  return r.createElement(
+    "g",
+    { className: "gz3d-axes" },
+    r.createElement("circle", {
+      cx,
+      cy,
+      r: len * 0.92,
+      fill: "none",
+      stroke: "#ffffff",
+      strokeOpacity: "0.55",
+      strokeWidth: 1.2,
+      style: { pointerEvents: "none" },
+    }),
+    r.createElement("ellipse", {
+      cx,
+      cy,
+      rx: len * 0.92,
+      ry: Math.max(6, len * 0.92 * Math.abs(Math.cos(rx))),
+      fill: "none",
+      stroke: "#ffffff",
+      strokeOpacity: "0.35",
+      strokeWidth: 1,
+      style: { pointerEvents: "none" },
+    }),
+    axes.map((axis, index) =>
+      r.createElement("line", {
+        key: index,
+        x1: cx,
+        y1: cy,
+        x2: axis.end.x,
+        y2: axis.end.y,
+        stroke: axis.color,
+        strokeWidth: 2.4,
+        strokeLinecap: "round",
+        style: { pointerEvents: "none" },
+      }),
+    ),
+    axes.map((axis, index) =>
+      r.createElement("circle", {
+        key: `tip-${index}`,
+        cx: axis.end.x,
+        cy: axis.end.y,
+        r: 4,
+        fill: axis.color,
+        style: { pointerEvents: "none" },
+      }),
+    ),
+    r.createElement("circle", {
+      cx,
+      cy,
+      r: 5,
+      fill: "#fff",
+      stroke: "#ffb347",
+      strokeWidth: 2,
+      style: { pointerEvents: "none" },
+    }),
+  );
+}
+
+/* Opening: liquid paint pours down, turns into the brand gradient ------ */
+function framiaIntroLiquid(canvas) {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const rect = canvas.getBoundingClientRect();
+  const W = Math.max(1, rect.width),
+    H = Math.max(1, rect.height),
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const reduce =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const gradient = ctx.createLinearGradient(0, 0, W, 0);
+  gradient.addColorStop(0, "#4f28b8");
+  gradient.addColorStop(0.3, "#8b4bf0");
+  gradient.addColorStop(0.56, "#cf4ada");
+  gradient.addColorStop(0.78, "#ff6fae");
+  gradient.addColorStop(1, "#ffa046");
+  const drips = [0.1, 0.23, 0.38, 0.52, 0.66, 0.79, 0.9];
+  const DURATION = 1620;
+  let startAt = 0,
+    raf = 0;
+  function frontY(x, time) {
+    const base = -0.06 * H + progressed * 1.18 * H;
+    return (
+      base +
+      Math.sin(x / (W * 0.105) + time * 0.0017) * H * 0.032 +
+      Math.sin(x / (W * 0.042) - time * 0.0023) * H * 0.013
+    );
+  }
+  let progressed = 0;
+  function draw(time) {
+    const t = Math.max(0, time - startAt),
+      p = reduce ? 1 : Math.min(1, t / DURATION);
+    progressed = p * p * (3 - 2 * p);
+    ctx.clearRect(0, 0, W, H);
+    ctx.beginPath();
+    ctx.moveTo(-8, -H * 0.2);
+    for (let x = -8; x <= W + 8; x += 5) ctx.lineTo(x, frontY(x, t));
+    ctx.lineTo(W + 8, -H * 0.2);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    /* glossy rim along the pouring edge */
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = -8; x <= W + 8; x += 5) {
+      const y = frontY(x, t);
+      x === -8 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    /* hanging drops */
+    for (let i = 0; i < drips.length; i++) {
+      const phase = ((t * 0.00075 + i * 0.19) % 1 + 1) % 1,
+        x = drips[i] * W,
+        y = frontY(x, t),
+        grow = Math.sin(phase * Math.PI),
+        len = H * (0.015 + 0.075 * grow),
+        width = 5 + grow * 3;
+      ctx.beginPath();
+      ctx.moveTo(x - width, y);
+      ctx.bezierCurveTo(
+        x - width,
+        y + len * 0.75,
+        x - width * 0.4,
+        y + len,
+        x,
+        y + len,
+      );
+      ctx.bezierCurveTo(
+        x + width * 0.4,
+        y + len,
+        x + width,
+        y + len * 0.75,
+        x + width,
+        y,
+      );
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(x - width * 0.3, y + len * 0.55, 1.6, Math.max(1, len * 0.22), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    /* gloss inside the paint */
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    const gloss = ctx.createLinearGradient(0, 0, 0, H * 0.78);
+    gloss.addColorStop(0, "rgba(255,255,255,0.5)");
+    gloss.addColorStop(0.2, "rgba(255,255,255,0.12)");
+    gloss.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gloss;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+    if (p < 1) raf = requestAnimationFrame(draw);
+    else {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+  startAt = performance.now();
+  raf = requestAnimationFrame(draw);
+  return () => cancelAnimationFrame(raf);
 }

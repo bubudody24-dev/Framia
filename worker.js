@@ -312,6 +312,34 @@ async function api(request, env, signedIn) {
       }
       return error('Method not allowed', 405);
     }
+    if (path[1] === 'wallpaper' && path.length === 2) {
+      if (!env.FILES) return error('Storage unavailable', 503);
+      const key = `wallpaper/${user.sub}`;
+      if (request.method === 'POST') {
+        const type = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        if (!/^image\/(png|jpeg|webp|avif)$/.test(type)) return error('Unsupported wallpaper type', 415);
+        const buffer = await request.arrayBuffer();
+        if (!buffer.byteLength) return error('Empty wallpaper', 400);
+        if (buffer.byteLength > 8_000_000) return error('Wallpaper too large', 413);
+        await env.FILES.put(key, buffer, { httpMetadata: { contentType: type, cacheControl: 'private, max-age=86400' } });
+        return json({ wallpaper: { url: `/api/wallpaper?v=${Date.now()}`, type, size: buffer.byteLength } });
+      }
+      if (request.method === 'GET') {
+        const object = await env.FILES.get(key);
+        if (!object) return error('Wallpaper not found', 404);
+        return new Response(object.body, {
+          headers: {
+            'Cache-Control': 'private, max-age=86400',
+            'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+          },
+        });
+      }
+      if (request.method === 'DELETE') {
+        await env.FILES.delete(key);
+        return json({ ok: true });
+      }
+      return error('Method not allowed', 405);
+    }
     if (path[1] === 'profile' && path[2] === 'username' && request.method === 'GET') {
       const wanted = (url.searchParams.get('u') || '').trim().toLowerCase();
       if (!USERNAME_RE.test(wanted)) return json({ available: false, valid: false });
