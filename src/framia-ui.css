@@ -1885,6 +1885,17 @@ summary:active {
   color: #fff;
 }
 
+@media (min-width: 901px) {
+  /* On wide screens the library owns the left edge and the tools follow it. */
+  .library {
+    order: -1;
+  }
+  .lib-handle {
+    right: -7px;
+    border-radius: 8px;
+  }
+}
+
 /* Presence: who is in the room --------------------------------------- */
 .presence-stack {
   display: flex;
