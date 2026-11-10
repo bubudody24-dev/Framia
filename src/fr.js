@@ -19305,6 +19305,7 @@ function cg() {
     [libTab, setLibTab] = Y.useState("media"),
     [libQuery, setLibQuery] = Y.useState(""),
     [libWidth, setLibWidth] = Y.useState(258),
+    [libHidden, setLibHidden] = Y.useState(false),
     [fontTick, setFontTick] = Y.useState(0),
     [inspectorTab, setInspectorTab] = Y.useState("properties"),
     [Bi, Ho] = Y.useState(() => {
@@ -23101,8 +23102,11 @@ function cg() {
         startWidth = libOpen ? libWidth : 0;
       const move = (moveEvent) => {
         const next = Rt(startWidth + moveEvent.clientX - startX, 0, 380);
-        setLibWidth(next);
-        setLibOpen(next > 40);
+        if (next < 24) {
+          (setLibHidden(true), setLibOpen(false));
+          return;
+        }
+        (setLibHidden(false), setLibWidth(Rt(next, 120, 380)), setLibOpen(true));
       };
       const stop = () => {
         window.removeEventListener("pointermove", move);
@@ -23112,7 +23116,8 @@ function cg() {
       window.addEventListener("pointerup", stop);
     },
     openLibraryTab = (tab) => {
-      (setLibTab(tab), setLibOpen(!(libOpen && libTab === tab)));
+      const same = !libHidden && libOpen && libTab === tab;
+      (setLibTab(tab), setLibHidden(false), setLibOpen(!same));
     },
     libInsertMedia = (item) => {
       if (!ze || Ue.locked || !Ue.visible) return;
@@ -23998,6 +24003,7 @@ function cg() {
           r.createElement(FramiaLibrary, {
             lang: Me,
             open: libOpen,
+            hidden: libHidden,
             tab: libTab,
             query: libQuery,
             width: libWidth,
@@ -24007,7 +24013,15 @@ function cg() {
             activeFont: framiaTextFont(),
             layersNode: libraryLayersNode,
             onTab: openLibraryTab,
-            onToggle: () => setLibOpen(!libOpen),
+            onToggle: () =>
+              libHidden
+                ? (setLibHidden(false), setLibOpen(true))
+                : (setLibHidden(true), setLibOpen(false)),
+            onShow: () => (
+              setLibHidden(false),
+              setLibWidth((prev) => (prev < 200 ? 258 : prev)),
+              setLibOpen(true)
+            ),
             onQuery: setLibQuery,
             onResize: libResize,
             onUpload: (kind) =>
@@ -28906,6 +28920,32 @@ function FramiaLibrary(props) {
       !query ||
       (shape[lang] || shape.pt).toLowerCase().includes(query),
   );
+  if (p.hidden)
+    return r.createElement(
+      "button",
+      {
+        className: "lib-collapsed",
+        title: label("Mostrar biblioteca", "Show library", "Mostrar biblioteca"),
+        "aria-label": label("Mostrar biblioteca", "Show library", "Mostrar biblioteca"),
+        onPointerDown: p.onResize,
+        onClick: p.onShow,
+      },
+      r.createElement(
+        "svg",
+        {
+          viewBox: "0 0 24 24",
+          width: 16,
+          height: 16,
+          fill: "none",
+          stroke: "currentColor",
+          strokeWidth: "2",
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+        },
+        r.createElement("path", { d: "M9 6l6 6-6 6" }),
+      ),
+      r.createElement("span", null, label("Biblioteca", "Library", "Biblioteca")),
+    );
   return r.createElement(
     "aside",
     {
