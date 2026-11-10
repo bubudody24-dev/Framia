@@ -19355,7 +19355,7 @@ function cg() {
     Ea = Y.useRef(new Map());
   Y.useRef(null);
   const Bo = Y.useRef(!1),
-    ze = P >= 0 ? z.frames[P] : null,
+    ze = (P >= 0 && z.frames[P]) || null,
     Ue = z.layers.find((i) => i.id === ee) || z.layers[0],
     mt =
       ((Dl =
@@ -19835,7 +19835,7 @@ function cg() {
     }, []),
     Y.useEffect(() => {
       (B(null), ia(null), rt(null), w(null), (Wt.current = null));
-    }, [z.id, ze == null ? void 0 : ze.id]),
+    }, [z.id]),
     Y.useEffect(() => {
       (pe !== "transform" ||
         Oa !== "editor" ||
@@ -20159,6 +20159,29 @@ function cg() {
       }
       if (pe === "transform" || pe === "select") {
         if (Ue.locked || !Ue.visible) return;
+        const tol3d = 14,
+          hit3d =
+            !i.shiftKey &&
+            [...mt].reverse().find((R) => R.type === "extrude" && Vp(R, s, tol3d));
+        if (hit3d) {
+          (tn([hit3d.id]),
+            B({ ids: [hit3d.id], box: jc([hit3d]), frameId: ze.id, layerId: ee }),
+            ia(hit3d.id),
+            rt({}),
+            wu(!0),
+            ve("properties"),
+            (Wt.current = {
+              type: "turn3d",
+              start: s,
+              id: hit3d.id,
+              rx: hit3d.rx || 0,
+              ry: hit3d.ry || 0,
+              orig: { rx: hit3d.rx || 0, ry: hit3d.ry || 0 },
+              frameId: ze.id,
+              layerId: ee,
+            }));
+          return;
+        }
         const tol = (() => {
           const c = i.currentTarget,
             r = c && c.getBoundingClientRect();
@@ -20422,8 +20445,8 @@ function cg() {
         const list = (bt.current.content?.[h.frameId]?.[h.layerId]) || [],
           target = list.find((candidate) => candidate.id === h.id);
         if (!target) return;
-        ((target.rx = Math.max(-89, Math.min(89, h.rx - (s.y - h.start.y) * 0.55))),
-          (target.ry = h.ry + (s.x - h.start.x) * 0.55),
+        ((target.rx = h.rx - (s.y - h.start.y) * 0.6),
+          (target.ry = h.ry + (s.x - h.start.x) * 0.6),
           Ea.current.clear(),
           te({ ...bt.current }));
         return;
@@ -21553,12 +21576,20 @@ function cg() {
         ));
     },
     ju = () => {
-      if (!ze || z.frames.length === 1) return;
+      if (!ze) return;
       De((s) => {
         (s.frames.splice(P, 1), delete s.content[ze.id]);
       });
       let i = Math.max(0, P - 1);
       (F(Ti(z.frames, i) / z.fps), le(i));
+    },
+    slotDelete = () => {
+      if (Tt) {
+        De((s) => (s.clips = s.clips.filter((c) => c.id !== Tt)));
+        (ta(null), He("Clipe removido"));
+        return;
+      }
+      ju();
     },
     Kc = () => {
       let i = {
@@ -22953,11 +22984,23 @@ function cg() {
             accountLabels.signIn,
           );
     };
-  const selPrimary = mt[0] || null,
+  const selPrimary = (M && M.ids.length && mt.find((el) => M.ids.includes(el.id))) || mt[0] || null,
     extrudeSel = mt.find((el) => el.type === "extrude") || null,
     animClones = Y.useRef(new Set()),
     patchSelection = (patch) => {
       if (!M || !M.ids.length || !ze) return;
+      const kfKey =
+        patch.color != null
+          ? "color"
+          : patch.opacity != null
+            ? "opacity"
+            : patch.rotate != null
+              ? "rotate"
+              : patch.scale != null
+                ? "scale"
+                : patch.x != null || patch.y != null
+                  ? "pos"
+                  : null;
       De((next) => {
         const layers = (next.content[ze.id] ||= {}),
           list = (layers[ee] ||= []);
@@ -22986,9 +23029,62 @@ function cg() {
             if (patch.rotate != null) tr.rotation = patch.rotate;
             el.transform = tr;
           }
+          if (kfKey && el.keys && Array.isArray(el.keys[kfKey]) && el.keys[kfKey].length) {
+            const value =
+              kfKey === "pos"
+                ? { x: el.transform?.x || 0, y: el.transform?.y || 0 }
+                : kfKey === "scale"
+                  ? el.transform?.sx ?? 1
+                  : kfKey === "rotate"
+                    ? el.transform?.rotation || 0
+                    : kfKey === "opacity"
+                      ? el.opacity ?? 1
+                      : el.color || "#222222";
+            el.keys = {
+              ...el.keys,
+              [kfKey]: [...el.keys[kfKey].filter((event) => event.f !== P), { f: P, v: value }].sort(
+                (a, b) => a.f - b.f,
+              ),
+            };
+          }
         }
       });
       Ea.current.clear();
+    },
+    makeExtrude = () => {
+      const el = mt[0];
+      if (!el || el.type === "extrude" || !ze) return;
+      const box = jc([el]);
+      const extrude = {
+        id: Ke(),
+        type: "extrude",
+        x: box.x,
+        y: box.y,
+        w: box.w,
+        h: box.h,
+        depth: Math.max(24, Math.round(Math.min(box.w, box.h) * 0.35)),
+        rx: -16,
+        ry: 28,
+        color: el.color || "#8b6df0",
+        opacity: el.opacity ?? 1,
+        source: structuredClone(el),
+      };
+      De((next) => {
+        const list = (next.content[ze.id] || {})[ee] || [];
+        const index = list.findIndex((candidate) => candidate.id === el.id);
+        if (index < 0) return;
+        list.splice(index, 1, extrude);
+      });
+      (tn([extrude.id]),
+        B({
+          ids: [extrude.id],
+          box: jc([extrude]),
+          frameId: ze.id,
+          layerId: ee,
+        }),
+        ia(extrude.id),
+        Ea.current.clear(),
+        He("Objeto 3D criado", "Arraste com Transformar (T) para girar"));
     },
     resetSelection = () => {
       if (!M || !M.ids.length || !ze) return;
@@ -24031,7 +24127,10 @@ function cg() {
             onInsertText: libInsertText,
             onFontUpload: libFontUpload,
             onUseFont: libUseFont,
-            onSelectClip: (id) => ta(id),
+            onSelectClip: (id) => {
+              (ta(id),
+                id && (tn([]), B(null), ia(null), rt(null)));
+            },
           }),
           r.createElement(
             "main",
@@ -25057,38 +25156,13 @@ function cg() {
                 r.createElement(
                   "button",
                   {
-                    className: ie === "anim" ? "active" : "",
-                    onClick: () => ve("anim"),
-                  },
-                  Me === "en" ? "Animation" : Me === "es" ? "Animación" : "Animação",
-                ),
-                r.createElement(
-                  "button",
-                  {
                     className: ie === "layers" ? "active" : "",
                     onClick: () => ve("layers"),
                   },
                   H.layers,
                 ),
               ),
-              ie === "anim"
-                ? r.createElement(
-                    "div",
-                    { className: "panel-scroll" },
-                    r.createElement(FramiaAnimPanel, {
-                      lang: Me,
-                      element: selPrimary,
-                      frame: P,
-                      total: z.frames.length,
-                      onToggle: toggleEvent,
-                      onClear: clearEvents,
-                      onSeek: (index) => {
-                        const frame = z.frames[index];
-                        frame && F(frame.start / z.fps);
-                      },
-                    }),
-                  )
-                : ie === "properties"
+              ie === "properties"
                 ? r.createElement(
                     "div",
                     { className: "panel-scroll" },
@@ -25111,9 +25185,43 @@ function cg() {
                             : "",
                         extrude:
                           selPrimary.type === "extrude" ? selPrimary : null,
+                        keys: selPrimary.keys || {},
+                        frame: P,
+                        onToggleKey: toggleEvent,
+                        onClear: clearEvents,
                         onChange: patchSelection,
                         onReset: resetSelection,
                       }),
+                    M &&
+                      selPrimary &&
+                      selPrimary.type !== "extrude" &&
+                      r.createElement(
+                        "section",
+                        { className: "inspector-section" },
+                        r.createElement(
+                          "div",
+                          { className: "section-heading" },
+                          r.createElement("span", null, "3D"),
+                        ),
+                        r.createElement(
+                          "button",
+                          { className: "subtle-wide", onClick: makeExtrude },
+                          Me === "en"
+                            ? "Turn into 3D"
+                            : Me === "es"
+                              ? "Convertir en 3D"
+                              : "Transformar em 3D",
+                        ),
+                        r.createElement(
+                          "p",
+                          { className: "anim-hint" },
+                          Me === "en"
+                            ? "Extrudes the selected drawing, stroke or text and lets you spin it in space."
+                            : Me === "es"
+                              ? "Extruye el dibujo, trazo o texto seleccionado y permite girarlo en el espacio."
+                              : "Extruda o desenho, traço ou texto selecionado e permite girá-lo no espaço.",
+                        ),
+                      ),
                     r.createElement(
                       "section",
                       { className: "inspector-section" },
@@ -26163,7 +26271,10 @@ function cg() {
               ),
               r.createElement(
                 "button",
-                { onClick: ju },
+                {
+                  onClick: slotDelete,
+                  title: Tt ? "Excluir o clipe selecionado" : "Excluir o quadro",
+                },
                 r.createElement(Hc, { size: 14 }),
                 H.delete,
               ),
@@ -26174,21 +26285,7 @@ function cg() {
                 r.createElement(b1, { size: 14 }),
                 H.split,
               ),
-              Tt &&
-                r.createElement(
-                  "button",
-                  {
-                    onClick: () => {
-                      (De(
-                        (i) => (i.clips = i.clips.filter((s) => s.id !== Tt)),
-                      ),
-                        ta(null));
-                    },
-                  },
-                  r.createElement(Hc, { size: 14 }),
-                  H.delete,
-                  " clip",
-                ),
+
             ),
             r.createElement(
               "div",
@@ -28562,16 +28659,6 @@ function framiaDownscaleImage(file, max, quality = 0.82) {
  * Framia shell pieces: library drawer, presence, inspector extras, fake 3D
  * ====================================================================== */
 
-const FRAMIA_ANIM_PROPS = [
-  { key: "pos", pt: "Posição", en: "Position", es: "Posición" },
-  { key: "scale", pt: "Escala", en: "Scale", es: "Escala" },
-  { key: "rotate", pt: "Rotação", en: "Rotation", es: "Rotación" },
-  { key: "opacity", pt: "Opacidade", en: "Opacity", es: "Opacidad" },
-  { key: "color", pt: "Cor", en: "Color", es: "Color" },
-];
-function framiaAnimLabel(prop, lang) {
-  return prop[lang] || prop.pt;
-}
 function framiaHexChannel(hex) {
   const value = String(hex || "").replace("#", "");
   if (value.length !== 6) return null;
@@ -28706,19 +28793,46 @@ function framiaShadeColor(hex, amount) {
   );
   return `rgb(${out[0]},${out[1]},${out[2]})`;
 }
+function framiaDrawExtrudeSource(ctx, el) {
+  const src = el.source;
+  if (!src) return;
+  const depth = Math.max(1, el.depth || 60);
+  const rx = ((el.rx || 0) * Math.PI) / 180,
+    ry = ((el.ry || 0) * Math.PI) / 180;
+  const dx = Math.sin(ry),
+    dy = -Math.sin(rx) * Math.cos(ry);
+  const steps = Math.max(6, Math.min(30, Math.round(depth / 3)));
+  for (let i = steps; i >= 1; i--) {
+    const t = i / steps;
+    ctx.save();
+    ctx.translate(dx * depth * t, dy * depth * t);
+    ctx.filter = `brightness(${0.38 + 0.42 * (1 - t)})`;
+    Eu(ctx, src);
+    ctx.restore();
+  }
+  ctx.save();
+  ctx.filter = "none";
+  Eu(ctx, src);
+  ctx.restore();
+}
 function framiaDrawExtrude(ctx, el) {
+  if (el.source) return framiaDrawExtrudeSource(ctx, el);
   const geo = framiaExtrudeGeometry(el);
   const base = el.color || "#7c4bf0";
+  ctx.save();
+  ctx.lineJoin = "round";
   for (const face of geo.faces) {
     ctx.beginPath();
     face.pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
     ctx.closePath();
-    ctx.fillStyle = framiaShadeColor(base, face.shade);
+    const fill = framiaShadeColor(base, face.shade);
+    ctx.fillStyle = fill;
     ctx.fill();
-    ctx.strokeStyle = face.front ? "#2a1660" : "rgba(26,14,58,0.55)";
-    ctx.lineWidth = face.front ? 2 : 1.2;
+    ctx.strokeStyle = fill;
+    ctx.lineWidth = 1.4;
     ctx.stroke();
   }
+  ctx.restore();
   if (el.gizmo) {
     const arms = [
       [1.35, 0, 0, "#ff5d6c"],
@@ -29181,6 +29295,23 @@ function FramiaTransformPanel(props) {
   const lang = p.lang || "pt";
   const label = (pt, en, es) => (lang === "en" ? en : lang === "es" ? es : pt);
   const values = p.values || {};
+  const keys = p.keys || {};
+  const frame = Math.max(0, p.frame || 0);
+  const keyDot = (key) => {
+    const track = Array.isArray(keys[key]) ? keys[key] : [];
+    const on = track.some((event) => event.f === frame);
+    return r.createElement(
+      "button",
+      {
+        className: `kf-dot${on ? " on" : track.length ? " armed" : ""}`,
+        title: on
+          ? label("Remover evento neste quadro", "Remove event here", "Quitar evento aquí")
+          : label("Criar evento neste quadro", "Add event here", "Crear evento aquí"),
+        onClick: () => p.onToggleKey && p.onToggleKey(key),
+      },
+      "◆",
+    );
+  };
   const field = (key, prefix, step, suffix) =>
     r.createElement(
       "label",
@@ -29197,6 +29328,14 @@ function FramiaTransformPanel(props) {
       }),
       suffix && r.createElement("span", null, suffix),
     );
+  const row = (key, name, body) =>
+    r.createElement(
+      "div",
+      { className: "prop-kf-row", key },
+      keyDot(key),
+      r.createElement("span", { className: "prop-kf-name" }, name),
+      body,
+    );
   return r.createElement(
     "section",
     { className: "inspector-section" },
@@ -29205,27 +29344,61 @@ function FramiaTransformPanel(props) {
       { className: "section-heading" },
       r.createElement("span", null, label("Transformar", "Transform", "Transformar")),
       r.createElement(
-        "button",
-        { className: "text-link", onClick: p.onReset },
-        label("Redefinir", "Reset", "Restablecer"),
+        "div",
+        { className: "section-links" },
+        Object.keys(keys).length > 0 &&
+          r.createElement(
+            "button",
+            { className: "text-link", onClick: p.onClear },
+            label("Limpar eventos", "Clear events", "Limpiar eventos"),
+          ),
+        r.createElement(
+          "button",
+          { className: "text-link", onClick: p.onReset },
+          label("Redefinir", "Reset", "Restablecer"),
+        ),
       ),
     ),
     r.createElement(
-      "div",
-      { className: "prop-grid" },
-      r.createElement("span", { className: "prop-label" }, label("Posição", "Position", "Posición")),
-      field("x", "X", 1),
-      field("y", "Y", 1),
-      r.createElement("span"),
-      r.createElement("span", { className: "prop-label" }, label("Escala", "Scale", "Escala")),
-      field("scale", "×", 1, "%"),
-      field("rotate", "∠", 1, "°"),
-      r.createElement("span"),
+      "p",
+      { className: "anim-hint" },
+      label(
+        "◆ grava o valor no quadro atual e anima entre os eventos.",
+        "◆ records the value on this frame and animates between events.",
+        "◆ graba el valor en este fotograma y anima entre eventos.",
+      ),
     ),
-    r.createElement(
-      "div",
-      { className: "prop-row" },
-      r.createElement("span", null, label("Opacidade", "Opacity", "Opacidad")),
+    row(
+      "pos",
+      label("Posição", "Position", "Posición"),
+      r.createElement(
+        "div",
+        { className: "prop-fields" },
+        field("x", "X", 1),
+        field("y", "Y", 1),
+      ),
+    ),
+    row(
+      "scale",
+      label("Escala", "Scale", "Escala"),
+      r.createElement(
+        "div",
+        { className: "prop-fields" },
+        field("scale", "×", 1, "%"),
+      ),
+    ),
+    row(
+      "rotate",
+      label("Rotação", "Rotation", "Rotación"),
+      r.createElement(
+        "div",
+        { className: "prop-fields" },
+        field("rotate", "∠", 1, "°"),
+      ),
+    ),
+    row(
+      "opacity",
+      label("Opacidade", "Opacity", "Opacidad"),
       r.createElement(
         "div",
         { className: "prop-slider" },
@@ -29240,10 +29413,9 @@ function FramiaTransformPanel(props) {
       ),
     ),
     p.color &&
-      r.createElement(
-        "div",
-        { className: "prop-row" },
-        r.createElement("span", null, label("Cor", "Color", "Color")),
+      row(
+        "color",
+        label("Cor", "Color", "Color"),
         r.createElement(
           "div",
           { className: "prop-slider" },
@@ -29279,7 +29451,7 @@ function FramiaTransformPanel(props) {
         r.createElement(
           "div",
           { className: "prop-row" },
-          r.createElement("span", null, label("Girar X / Y", "Rotate X / Y", "Girar X / Y")),
+          r.createElement("span", null, label("Girar X", "Rotate X", "Girar X")),
           r.createElement(
             "div",
             { className: "prop-slider" },
@@ -29290,18 +29462,13 @@ function FramiaTransformPanel(props) {
               value: Math.round(p.extrude.rx || 0),
               onChange: (event) => p.onChange({ rx: +event.target.value }),
             }),
-            r.createElement(
-              "b",
-              null,
-              Math.round(p.extrude.rx || 0),
-              "°",
-            ),
+            r.createElement("b", null, Math.round(p.extrude.rx || 0), "°"),
           ),
         ),
         r.createElement(
           "div",
           { className: "prop-row" },
-          r.createElement("span"),
+          r.createElement("span", null, label("Girar Y", "Rotate Y", "Girar Y")),
           r.createElement(
             "div",
             { className: "prop-slider" },
@@ -29312,88 +29479,19 @@ function FramiaTransformPanel(props) {
               value: Math.round(p.extrude.ry || 0),
               onChange: (event) => p.onChange({ ry: +event.target.value }),
             }),
-            r.createElement(
-              "b",
-              null,
-              Math.round(p.extrude.ry || 0),
-              "°",
-            ),
+            r.createElement("b", null, Math.round(p.extrude.ry || 0), "°"),
+          ),
+        ),
+        r.createElement(
+          "p",
+          { className: "anim-hint" },
+          label(
+            "Arraste o objeto com a ferramenta Transformar (T) para girar em 3D.",
+            "Drag the object with the Transform tool (T) to spin it in 3D.",
+            "Arrastra el objeto con Transformar (T) para girarlo en 3D.",
           ),
         ),
       ),
-  );
-}
-
-/* Inspector: events (keyframes) per property -------------------------- */
-function FramiaAnimPanel(props) {
-  const p = props;
-  const lang = p.lang || "pt";
-  const label = (pt, en, es) => (lang === "en" ? en : lang === "es" ? es : pt);
-  const total = Math.max(2, p.total || 2);
-  const frame = Math.max(0, p.frame || 0);
-  const keys = (p.element && p.element.keys) || {};
-  const rows = FRAMIA_ANIM_PROPS.map((prop) => {
-    const track = Array.isArray(keys[prop.key]) ? keys[prop.key] : [];
-    const active = track.some((event) => event.f === frame);
-    return r.createElement(
-      "div",
-      { key: prop.key, className: "kf-row" },
-      r.createElement("span", null, framiaAnimLabel(prop, lang)),
-      r.createElement(
-        "div",
-        { className: "kf-track" },
-        track.map((event) =>
-          r.createElement("i", {
-            key: event.f,
-            className: event.f === frame ? "on" : "",
-            style: { left: `${(event.f / (total - 1)) * 100}%` },
-            title: `${label("quadro", "frame", "fotograma")} ${event.f + 1}`,
-            onClick: () => p.onSeek && p.onSeek(event.f),
-          }),
-        ),
-      ),
-      r.createElement(
-        "button",
-        {
-          className: `kf-dot${active ? " on" : ""}`,
-          title: active
-            ? label("Remover evento", "Remove event", "Quitar evento")
-            : label("Criar evento neste quadro", "Add event here", "Crear evento aquí"),
-          onClick: () => p.onToggle(prop.key),
-        },
-        "◆",
-      ),
-    );
-  });
-  return r.createElement(
-    "section",
-    { className: "inspector-section" },
-    r.createElement(
-      "div",
-      { className: "section-heading" },
-      r.createElement("span", null, label("Eventos", "Events", "Eventos")),
-      r.createElement(
-        "button",
-        { className: "text-link", onClick: p.onClear },
-        label("Limpar", "Clear", "Limpiar"),
-      ),
-    ),
-    r.createElement(
-      "p",
-      { className: "anim-hint" },
-      p.element
-        ? label(
-            `Quadro ${frame + 1} de ${total}. O ◆ cria um evento com o valor atual; dois eventos animam a propriedade.`,
-            `Frame ${frame + 1} of ${total}. ◆ adds an event with the current value; two events animate the property.`,
-            `Fotograma ${frame + 1} de ${total}. ◆ crea un evento con el valor actual; dos eventos animan la propiedad.`,
-          )
-        : label(
-            "Selecione um elemento para animar.",
-            "Select an element to animate it.",
-            "Selecciona un elemento para animarlo.",
-          ),
-    ),
-    p.element && r.createElement("div", { className: "kf-list" }, rows),
   );
 }
 

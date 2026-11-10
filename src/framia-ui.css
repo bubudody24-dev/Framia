@@ -2106,6 +2106,46 @@ summary:active {
   border-color: var(--accent);
   color: #fff;
 }
+.kf-dot.armed {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.kf-dot.armed.on {
+  color: #fff;
+}
+.section-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.prop-kf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+}
+.prop-kf-row .kf-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 10px;
+}
+.prop-kf-name {
+  flex: none;
+  width: 56px;
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  color: var(--c-90919f);
+}
+.prop-fields {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+.prop-kf-row .prop-slider {
+  flex: 1;
+}
 .anim-hint {
   font-size: 10.5px;
   line-height: 1.5;
