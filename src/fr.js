@@ -29412,6 +29412,13 @@ function framiaAnimated(el, frame) {
 
 /* Fake 3D: a flat box rotated in space and shaded per face -------------- */
 function framiaExtrudeGeometry(el) {
+  if (el.source) {
+    const sil = framiaExtrudeSilhouette(el);
+    if (sil) {
+      const shaped = framiaExtrudePolyGeometry(el, sil);
+      if (shaped) return shaped;
+    }
+  }
   const w = Math.max(1, el.w || 200),
     h = Math.max(1, el.h || 200),
     d = Math.max(1, el.depth || 80);
@@ -29548,9 +29555,308 @@ function framiaSourceTexture(el) {
   } catch {
     return null;
   }
-  const entry = { canvas };
+  const entry = { canvas, box, scale };
   FRAMIA_SOURCE_TEX.set(src, entry);
   return entry;
+}
+/* Silhouette: extrude the artwork's outline instead of its bounding box -- */
+const FRAMIA_SIL_CACHE = new WeakMap();
+function framiaPolyArea(poly) {
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    area += a.x * b.y - b.x * a.y;
+  }
+  return area / 2;
+}
+function framiaTriangulate(poly) {
+  const idx = poly.map((_, i) => i), out = [];
+  const cross = (a, b, c) =>
+    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  let guard = idx.length * 4 + 8;
+  while (idx.length > 3 && guard-- > 0) {
+    let cut = false;
+    for (let i = 0; i < idx.length; i++) {
+      const i0 = idx[(i + idx.length - 1) % idx.length],
+        i1 = idx[i],
+        i2 = idx[(i + 1) % idx.length],
+        a = poly[i0], b = poly[i1], c = poly[i2];
+      if (cross(a, b, c) <= 0) continue;
+      let blocked = false;
+      for (const j of idx) {
+        if (j === i0 || j === i1 || j === i2) continue;
+        const p = poly[j];
+        if (cross(a, b, p) >= 0 && cross(b, c, p) >= 0 && cross(c, a, p) >= 0) {
+          blocked = true;
+          break;
+        }
+      }
+      if (blocked) continue;
+      out.push([i0, i1, i2]);
+      idx.splice(i, 1);
+      cut = true;
+      break;
+    }
+    if (!cut) break;
+  }
+  if (idx.length === 3) out.push([idx[0], idx[1], idx[2]]);
+  return out;
+}
+function framiaSimplifyLoop(points, tol) {
+  if (points.length < 5) return points;
+  const keep = new Uint8Array(points.length);
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+  const stack = [[0, points.length - 1]];
+  const far = (p, a, b) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return Math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / len;
+  };
+  while (stack.length) {
+    const [i0, i1] = stack.pop();
+    let at = -1, best = tol;
+    for (let i = i0 + 1; i < i1; i++) {
+      const d = far(points[i], points[i0], points[i1]);
+      if (d > best) { best = d; at = i; }
+    }
+    if (at > 0) {
+      keep[at] = 1;
+      stack.push([i0, at], [at, i1]);
+    }
+  }
+  return points.filter((_, i) => keep[i]);
+}
+function framiaSolidGrid(tex) {
+  const cw = tex.canvas.width, ch = tex.canvas.height;
+  if (!cw || !ch) return null;
+  const k = 96 / Math.max(cw, ch);
+  const gw = Math.max(8, Math.round(cw * k)), gh = Math.max(8, Math.round(ch * k));
+  const small = document.createElement("canvas");
+  small.width = gw;
+  small.height = gh;
+  const sctx = small.getContext("2d");
+  if (!sctx) return null;
+  sctx.drawImage(tex.canvas, 0, 0, gw, gh);
+  let data;
+  try {
+    data = sctx.getImageData(0, 0, gw, gh).data;
+  } catch {
+    return null;
+  }
+  const at = (x, y) => {
+    const i = (y * gw + x) * 4;
+    return [data[i], data[i + 1], data[i + 2], data[i + 3]];
+  };
+  const corners = [at(0, 0), at(gw - 1, 0), at(0, gh - 1), at(gw - 1, gh - 1)].filter(
+    (c) => c[3] > 24,
+  );
+  const bg = corners.length
+    ? corners.reduce(
+        (acc, c) => [
+          acc[0] + c[0] / corners.length,
+          acc[1] + c[1] / corners.length,
+          acc[2] + c[2] / corners.length,
+        ],
+        [0, 0, 0],
+      )
+    : null;
+  const grid = new Uint8Array(gw * gh);
+  let solid = 0;
+  for (let y = 0; y < gh; y++)
+    for (let x = 0; x < gw; x++) {
+      const c = at(x, y);
+      let on = c[3] > 90;
+      if (on && bg) {
+        const dr = c[0] - bg[0], dg = c[1] - bg[1], db = c[2] - bg[2];
+        if (Math.sqrt(dr * dr + dg * dg + db * db) < 46) on = false;
+      }
+      if (on) {
+        grid[y * gw + x] = 1;
+        solid++;
+      }
+    }
+  if (!solid || solid > gw * gh * 0.96) return null;
+  return { grid, gw, gh };
+}
+function framiaGridBlobs(g) {
+  const { grid, gw, gh } = g,
+    seen = new Uint8Array(grid.length),
+    out = [],
+    minArea = Math.max(6, gw * gh * 0.006);
+  for (let i = 0; i < grid.length; i++) {
+    if (!grid[i] || seen[i]) continue;
+    const stack = [i], cells = [];
+    seen[i] = 1;
+    while (stack.length) {
+      const cell = stack.pop(), x = cell % gw, y = (cell - x) / gw;
+      cells.push(cell);
+      for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
+        if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+        const n = ny * gw + nx;
+        if (grid[n] && !seen[n]) {
+          seen[n] = 1;
+          stack.push(n);
+        }
+      }
+    }
+    if (cells.length >= minArea) out.push(cells);
+  }
+  out.sort((a, b) => b.length - a.length);
+  return out.slice(0, 4);
+}
+function framiaTraceLoop(cells, g) {
+  const { grid, gw, gh } = g;
+  const solidAt = (x, y) =>
+    !(x < 0 || y < 0 || x >= gw || y >= gh) && grid[y * gw + x] === 1;
+  const key = (x, y) => y * (gw + 2) + x;
+  const edges = new Map();
+  const push = (ax, ay, bx, by) => {
+    const k = key(ax, ay), edge = { ax, ay, bx, by };
+    const list = edges.get(k);
+    if (list) list.push(edge);
+    else edges.set(k, [edge]);
+  };
+  for (const cell of cells) {
+    const x = cell % gw, y = (cell - x) / gw;
+    if (!solidAt(x, y - 1)) push(x, y, x + 1, y);
+    if (!solidAt(x + 1, y)) push(x + 1, y, x + 1, y + 1);
+    if (!solidAt(x, y + 1)) push(x + 1, y + 1, x, y + 1);
+    if (!solidAt(x - 1, y)) push(x, y + 1, x, y);
+  }
+  const loops = [];
+  while (edges.size) {
+    const head = edges.get(edges.keys().next().value)[0];
+    const loop = [{ x: head.ax, y: head.ay }];
+    let edge = head, guard = 0;
+    while (edge && guard++ < 40000) {
+      const k = key(edge.ax, edge.ay), list = edges.get(k);
+      if (!list) break;
+      const at = list.indexOf(edge);
+      if (at >= 0) list.splice(at, 1);
+      if (!list.length) edges.delete(k);
+      loop.push({ x: edge.bx, y: edge.by });
+      const next = edges.get(key(edge.bx, edge.by));
+      edge = next && next[0];
+    }
+    if (loop.length > 3) loops.push(loop);
+  }
+  return loops;
+}
+function framiaExtrudeSilhouette(el) {
+  const src = el.source, tex = framiaSourceTexture(el);
+  if (!src || !tex || !tex.box || !tex.scale) return null;
+  const cached = FRAMIA_SIL_CACHE.get(src);
+  if (cached !== undefined) return cached;
+  const g = framiaSolidGrid(tex), box = tex.box;
+  let result = null;
+  if (g) {
+    const polys = [];
+    for (const cells of framiaGridBlobs(g))
+      for (const raw of framiaTraceLoop(cells, g)) {
+        const loop = framiaSimplifyLoop(raw, 1.3);
+        if (loop.length < 3) continue;
+        const poly = loop.map((p) => ({
+          x: box.x + (p.x / g.gw) * box.w,
+          y: box.y + (p.y / g.gh) * box.h,
+        }));
+        const area = framiaPolyArea(poly);
+        if (Math.abs(area) < box.w * box.h * 0.004) continue;
+        if (area < 0) poly.reverse();
+        polys.push({ poly, tris: framiaTriangulate(poly) });
+      }
+    if (polys.length) result = { polys };
+  }
+  FRAMIA_SIL_CACHE.set(src, result);
+  return result;
+}
+function framiaExtrudePolyGeometry(el, sil) {
+  const w = Math.max(1, el.w || 200),
+    h = Math.max(1, el.h || 200),
+    d = Math.max(1, el.depth || 80);
+  const rx = ((el.rx || 0) * Math.PI) / 180,
+    ry = ((el.ry || 0) * Math.PI) / 180;
+  const cx = (el.x || 0) + w / 2,
+    cy = (el.y || 0) + h / 2,
+    focal = Math.max(w, h) * 2.4,
+    hd = d / 2;
+  const project = (px, py, pz) => {
+    let x = px, y = py, z = pz;
+    let t = x * Math.cos(ry) + z * Math.sin(ry);
+    z = -x * Math.sin(ry) + z * Math.cos(ry);
+    x = t;
+    t = y * Math.cos(rx) - z * Math.sin(rx);
+    z = y * Math.sin(rx) + z * Math.cos(rx);
+    y = t;
+    const s = focal / (focal - z);
+    return { x: cx + x * s, y: cy + y * s, z };
+  };
+  const tex = framiaSourceTexture(el);
+  const uvAt = (p) =>
+    tex ? { x: (p.x - tex.box.x) * tex.scale, y: (p.y - tex.box.y) * tex.scale } : null;
+  const meanZ = (pts) => pts.reduce((sum, p) => sum + p.z, 0) / pts.length;
+  const points = [],
+    faces = [];
+  for (const shape of sil.polys) {
+    const poly = shape.poly;
+    if (poly.length < 3) continue;
+    const front = poly.map((p) => project(p.x - cx, p.y - cy, -hd)),
+      back = poly.map((p) => project(p.x - cx, p.y - cy, hd)),
+      uv = poly.map(uvAt),
+      tri = shape.tris.length ? shape.tris : framiaTriangulate(poly);
+    points.push(...front, ...back);
+    faces.push({ pts: front, uv, tri, shade: 1.12, front: true, depth: meanZ(front) });
+    faces.push({ pts: back, uv, tri, shade: 0.7, depth: meanZ(back) });
+    for (let i = 0; i < poly.length; i++) {
+      const j = (i + 1) % poly.length;
+      const quad = [front[i], front[j], back[j], back[i]];
+      const dx = quad[1].x - quad[0].x,
+        dy = quad[1].y - quad[0].y,
+        len = Math.hypot(dx, dy) || 1;
+      const dot = (-dy / len) * -0.45 + (dx / len) * -0.89;
+      faces.push({ pts: quad, shade: 0.5 + 0.46 * Math.abs(dot), depth: meanZ(quad) });
+    }
+  }
+  if (!faces.length) return null;
+  faces.sort((a, b) => a.depth - b.depth);
+  return { points, faces, cx, cy };
+}
+function framiaDrawTriTexture(ctx, tex, tri, uvs) {
+  if (!tri || !uvs) return;
+  const A = tri[0], B = tri[1], C = tri[2],
+    sa = uvs[0], sb = uvs[1], sc = uvs[2];
+  if (!A || !B || !C || !sa || !sb || !sc) return;
+  const u1x = sb.x - sa.x,
+    u1y = sb.y - sa.y,
+    v1x = sc.x - sa.x,
+    v1y = sc.y - sa.y,
+    det = u1x * v1y - u1y * v1x;
+  if (!det) return;
+  const U1x = B.x - A.x,
+    U1y = B.y - A.y,
+    V1x = C.x - A.x,
+    V1y = C.y - A.y;
+  const a11 = (U1x * v1y - V1x * u1y) / det,
+    a21 = (V1x * u1x - U1x * v1x) / det,
+    a12 = (U1y * v1y - V1y * u1y) / det,
+    a22 = (V1y * u1x - U1y * v1x) / det;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(A.x, A.y);
+  ctx.lineTo(B.x, B.y);
+  ctx.lineTo(C.x, C.y);
+  ctx.closePath();
+  ctx.clip();
+  ctx.transform(
+    a11,
+    a12,
+    a21,
+    a22,
+    A.x - a11 * sa.x - a21 * sa.y,
+    A.y - a12 * sa.x - a22 * sa.y,
+  );
+  ctx.drawImage(tex, 0, 0);
+  ctx.restore();
 }
 /* Textured quad: two triangles, each mapped with its own affine matrix. */
 function framiaDrawQuadTexture(ctx, tex, quad, texQuad) {
@@ -29634,8 +29940,19 @@ function framiaDrawExtrudeSource(ctx, el) {
   ctx.save();
   ctx.lineJoin = "round";
   for (const face of geo.faces) {
-    const cap = face.front || face.idx[0] === 5;
-    if (cap) {
+    if (face.uv && face.tri) {
+      ctx.save();
+      ctx.filter = `brightness(${face.shade})`;
+      for (const t of face.tri) {
+        const poly = t.map((i) => face.pts[i]),
+          uv = t.map((i) => face.uv[i]);
+        if (poly[0] && poly[1] && poly[2]) framiaDrawTriTexture(ctx, tex.canvas, poly, uv);
+      }
+      ctx.restore();
+      continue;
+    }
+    const cap = face.front || (face.idx && face.idx[0] === 5);
+    if (cap && face.idx) {
       ctx.save();
       ctx.filter = `brightness(${face.shade})`;
       framiaDrawQuadTexture(
@@ -29647,6 +29964,7 @@ function framiaDrawExtrudeSource(ctx, el) {
       ctx.restore();
       continue;
     }
+    if (!face.pts) continue;
     const fill = framiaShadeColor(base, face.shade);
     ctx.beginPath();
     face.pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
