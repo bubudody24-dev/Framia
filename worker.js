@@ -30,6 +30,7 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS framia_profiles_username ON framia_profiles(username)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_friends (id TEXT PRIMARY KEY, requester TEXT NOT NULL, target TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_settings_v2 (owner TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at INTEGER NOT NULL)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_library_v2 (owner TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at INTEGER NOT NULL)'),
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS framia_friends_pair ON framia_friends(requester,target)'),
   ]).catch((cause) => { schema = undefined; throw cause; });
   await schema;
@@ -263,6 +264,42 @@ async function api(request, env, signedIn) {
           const object = await env.FILES.get(key);
           return object ? new Response(object.body, { headers: { ...privateHeaders, 'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream' } }) : error('Media not found', 404);
         }
+      }
+    }
+    if (path[1] === 'library' && path.length === 2) {
+      if (request.method === 'GET') {
+        const row = await env.DB.prepare('SELECT body FROM framia_library_v2 WHERE owner=?').bind(user.sub).first();
+        return json({ library: row ? JSON.parse(row.body) : null });
+      }
+      if (request.method === 'PUT') {
+        const body = await readJson(request, 12_000_000);
+        const folders = Array.isArray(body?.folders)
+          ? body.folders
+              .filter((folder) => folder && typeof folder.id === 'string')
+              .slice(0, 60)
+              .map((folder) => ({
+                id: String(folder.id).slice(0, 64),
+                name: String(folder.name || 'Pasta').slice(0, 60),
+              }))
+          : [];
+        if (Array.isArray(body?.items))
+          if (body.items.length > 400) return error('Library too large', 413);
+        const items = (Array.isArray(body?.items) ? body.items : [])
+          .filter((item) => item && typeof item.id === 'string' && typeof item.url === 'string')
+          .slice(0, 400)
+          .map((item) => ({
+            id: String(item.id).slice(0, 64),
+            name: String(item.name || 'Item').slice(0, 80),
+            kind: item.kind === 'audio' ? 'audio' : 'image',
+            url: item.url,
+            folderId: item.folderId ? String(item.folderId).slice(0, 64) : null,
+            createdAt: Number(item.createdAt) || Date.now(),
+          }));
+        const serialized = JSON.stringify({ folders, items });
+        if (serialized.length > 9_000_000) return error('Library too large', 413);
+        await env.DB.prepare('INSERT INTO framia_library_v2(owner,body,updated_at) VALUES(?,?,?) ON CONFLICT(owner) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at')
+          .bind(user.sub, serialized, Date.now()).run();
+        return json({ ok: true });
       }
     }
     if (path[1] === 'settings' && path.length === 2) {

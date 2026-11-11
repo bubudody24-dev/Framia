@@ -17564,6 +17564,13 @@ function Zp() {
                       Math.abs((ne == null ? void 0 : ne.roundness) || 1),
                     ));
             W = Math.max(W, z * Math.hypot(oe[0], oe[1], oe[2], oe[3]) + 2);
+            if (V.type === "extrude")
+              W = Math.max(
+                W,
+                (V.depth || 60) +
+                  (V.gizmo ? Math.max(V.w || 0, V.h || 0) * 1.05 : 0) +
+                  24,
+              );
           }
           ((Z.box = k && {
             x: Math.floor(k.x - W),
@@ -19308,6 +19315,28 @@ function cg() {
     [libHidden, setLibHidden] = Y.useState(false),
     [fontTick, setFontTick] = Y.useState(0),
     [inspectorTab, setInspectorTab] = Y.useState("properties"),
+    [orbit3d, setOrbit3d] = Y.useState(false),
+    [libraryBox, setLibraryBox] = Y.useState(() => framiaReadLibrary(framiaAccountScope)),
+    [libraryFolder, setLibraryFolder] = Y.useState(null),
+    [toolOptionsOpen, setToolOptionsOpen] = Y.useState(() => {
+      try {
+        return localStorage.getItem("framia-tool-options") !== "0";
+      } catch {
+        return true;
+      }
+    }),
+    [trackOpen, setTrackOpen] = Y.useState(() => {
+      try {
+        const raw = JSON.parse(localStorage.getItem("framia-track-open") || "{}");
+        return {
+          anim: raw.anim !== false,
+          audio: raw.audio !== false,
+          video: raw.video !== false,
+        };
+      } catch {
+        return { anim: true, audio: true, video: true };
+      }
+    }),
     [Bi, Ho] = Y.useState(() => {
       try {
         return JSON.parse(localStorage.getItem("framia-themes")) || [];
@@ -19339,6 +19368,7 @@ function cg() {
     noteDraw = Y.useRef(null),
     sa = Y.useRef(null),
     Wt = Y.useRef(null),
+    orbitTap = Y.useRef({ key: "", at: 0 }),
     fa = Y.useRef([]),
     Ht = Y.useRef([]),
     rl_redo = Y.useRef([]),
@@ -19875,6 +19905,28 @@ function cg() {
         s.clearRect(0, 0, i.width, i.height),
         (s.fillStyle = z.background || "#ffffff"),
         s.fillRect(0, 0, i.width, i.height));
+      const paper =
+        ft.paperMedia && !String(ft.paperMedia.type || "").startsWith("video")
+          ? framiaPaperImage(ft.paperMedia.url)
+          : null;
+      if (paper) {
+        if (paper.ready && paper.img.naturalWidth) {
+          const fit = Math.max(
+              i.width / paper.img.naturalWidth,
+              i.height / paper.img.naturalHeight,
+            ),
+            dw = paper.img.naturalWidth * fit,
+            dh = paper.img.naturalHeight * fit;
+          s.drawImage(
+            paper.img,
+            (i.width - dw) / 2,
+            (i.height - dh) / 2,
+            dw,
+            dh,
+          );
+        } else
+          paper.onReady = () => te((current) => ({ ...current }));
+      }
       let h = z.clips.find(
           (X) => X.type === "video" && K >= X.start && K < X.start + X.duration,
         ),
@@ -20015,6 +20067,7 @@ function cg() {
       M,
       Z,
       Au,
+      ft.paperMedia,
     ]));
   const en = (i, s = !1) => {
       let h = Cl.current.getBoundingClientRect();
@@ -20028,6 +20081,7 @@ function cg() {
     },
     tn = (i, s = ee) => {
       var U, X;
+      i && i.length && Tt && ta(null);
       const h =
           ((X =
             (U = z.content) == null
@@ -20109,6 +20163,38 @@ function cg() {
         return;
       }
       if (!ze) return;
+      if (orbit3d) {
+        const picked = (() => {
+          for (const layer of z.layers) {
+            const list = z.content?.[ze.id]?.[layer.id] || [];
+            const el =
+              list.find(
+                (candidate) =>
+                  candidate.type === "extrude" &&
+                  M &&
+                  M.ids.includes(candidate.id),
+              ) || list.find((candidate) => candidate.type === "extrude");
+            if (el) return { el, layerId: layer.id };
+          }
+          return null;
+        })();
+        if (!picked) {
+          setOrbit3d(false);
+          return;
+        }
+        Wt.current = {
+          type: "turn3d",
+          start: s,
+          sens: 0.9,
+          id: picked.el.id,
+          rx: picked.el.rx || 0,
+          ry: picked.el.ry || 0,
+          orig: { rx: picked.el.rx || 0, ry: picked.el.ry || 0 },
+          frameId: ze.id,
+          layerId: picked.layerId,
+        };
+        return;
+      }
       if (pe === "extrude") {
         if (Ue.locked || !Ue.visible) return;
         const list = (z.content?.[ze.id]?.[ee]) || [],
@@ -20442,13 +20528,26 @@ function cg() {
         return;
       }
       if (h.type === "turn3d") {
-        const list = (bt.current.content?.[h.frameId]?.[h.layerId]) || [],
-          target = list.find((candidate) => candidate.id === h.id);
-        if (!target) return;
-        ((target.rx = h.rx - (s.y - h.start.y) * 0.6),
-          (target.ry = h.ry + (s.x - h.start.x) * 0.6),
-          Ea.current.clear(),
-          te({ ...bt.current }));
+        const cur = bt.current,
+          frameContent = cur.content?.[h.frameId] || {},
+          list = frameContent[h.layerId] || [],
+          index = list.findIndex((candidate) => candidate.id === h.id);
+        if (index < 0) return;
+        const sens = h.sens || 0.6,
+          nextList = list.slice();
+        nextList[index] = {
+          ...list[index],
+          rx: h.rx - (s.y - h.start.y) * sens,
+          ry: h.ry + (s.x - h.start.x) * sens,
+        };
+        const next = {
+          ...cur,
+          content: {
+            ...cur.content,
+            [h.frameId]: { ...frameContent, [h.layerId]: nextList },
+          },
+        };
+        (Ea.current.clear(), (bt.current = next), te(next));
         return;
       }
       if (h.el.type === "shape")
@@ -20480,27 +20579,36 @@ function cg() {
     an = () => {
       let i = Wt.current;
       if (i) {
-        if (
-          i.type === "turn3d" &&
-          ((Wt.current = null),
-          (() => {
-            const list =
-                (bt.current.content?.[i.frameId]?.[i.layerId]) || [],
-              target = list.find((candidate) => candidate.id === i.id);
-            if (!target) return;
-            const rx = target.rx,
-              ry = target.ry;
-            Object.assign(target, i.orig);
-            (De((next) => {
+        if (i.type === "turn3d" && (Wt.current = null))
+          return (() => {
+            const cur = bt.current,
+              frameContent = cur.content?.[i.frameId] || {},
+              list = frameContent[i.layerId] || [],
+              index = list.findIndex((candidate) => candidate.id === i.id);
+            if (index < 0) return;
+            const rx = list[index].rx,
+              ry = list[index].ry,
+              restoredList = list.slice();
+            restoredList[index] = {
+              ...list[index],
+              rx: i.orig.rx,
+              ry: i.orig.ry,
+            };
+            const restored = {
+              ...cur,
+              content: {
+                ...cur.content,
+                [i.frameId]: { ...frameContent, [i.layerId]: restoredList },
+              },
+            };
+            ((bt.current = restored), te(restored), Ea.current.clear());
+            De((next) => {
               const found = (
                 (next.content[i.frameId] || {})[i.layerId] || []
               ).find((candidate) => candidate.id === i.id);
               found && ((found.rx = rx), (found.ry = ry));
-            }),
-              Ea.current.clear());
-          })())
-        )
-          return;
+            });
+          })();
         if (((Wt.current = null), i.type === "marquee")) {
           if (q) {
             const picked = new Set(i.base || []),
@@ -22401,9 +22509,71 @@ function cg() {
         setTimeout(() => Za((R) => R.filter((U) => U.id !== s.id)), 2400));
     };
   Y.useEffect(() => {
+    if (typeof window === "undefined" || Oa !== "editor") return;
+    const api = {
+      project: () => bt.current,
+      state: () => ({
+        project: bt.current,
+        frameIndex: P,
+        frameId: ze && ze.id,
+        tool: pe,
+        orbit: orbit3d,
+        selection: (M && M.ids) || [],
+        clip: Tt,
+        layerId: ee,
+        layers: (z.layers || []).map((layer) => ({
+          id: layer.id,
+          name: layer.name,
+          visible: layer.visible,
+        })),
+      }),
+      frames: () =>
+        z.frames.map((frame, index) => ({
+          index,
+          id: frame.id,
+          elements: Object.values(z.content?.[frame.id] || {}).reduce(
+            (sum, list) => sum + (list || []).length,
+            0,
+          ),
+        })),
+      select: (ids) => tn(ids || []),
+      setTool: (id) => selectTool(id),
+      goFrame: (index) => F(Math.max(0, Number(index) || 0) / z.fps),
+      deleteFrame: () => ju(),
+      deleteClip: () => slotDelete(),
+      setOrbit: (on) => setOrbit3d(!!on),
+      clearOrbit: () => setOrbit3d(false),
+      setBackground: (color) => De((next) => (next.background = color)),
+      library: () => libraryBox,
+      saveSelectionToLibrary: () => libSaveSelection(),
+      newFolder: (name) => {
+        if (!name) return libNewFolder();
+        const folder = { id: Ke(), name: String(name).slice(0, 60) };
+        libPersist({ ...libraryBox, folders: [...libraryBox.folders, folder] });
+        return folder;
+      },
+      pickFolder: (id) => setLibraryFolder(id || null),
+      setPaper: (url, name) =>
+        Qa((theme) => ({
+          ...theme,
+          paperMedia: url
+            ? { url, name: name || "Teste", type: "image/png" }
+            : null,
+        })),
+    };
+    window.__framia = api;
+    return () => {
+      window.__framia === api && delete window.__framia;
+    };
+  }, [Oa, z, P, ze, pe, orbit3d, M, Tt, ee, libraryBox, libraryFolder]);
+  Y.useEffect(() => {
     if (Oa !== "editor") return;
     const i = (y) => {
       if (y.key === "Escape") {
+        if (orbit3d) {
+          setOrbit3d(false);
+          return;
+        }
         if (Oe) {
           Ve("");
           return;
@@ -22485,7 +22655,19 @@ function cg() {
           y.key === "End" &&
             (y.preventDefault(), F(Math.max(0, (Hn(z.frames) - 1) / z.fps))),
           (() => {
-            const $ = y.key.toLowerCase();
+            const $ = y.key.toLowerCase(),
+              toolKey = (shortcuts.transform || "v").toLowerCase(),
+              has3d = mt.some((el) => el.type === "extrude");
+            if (!y.repeat && has3d && ($ === toolKey || $ === "t" || $ === "r")) {
+              const now = Date.now(),
+                last = orbitTap.current;
+              if (last.key === $ && now - last.at < 520) {
+                orbitTap.current = { key: "", at: 0 };
+                (setOrbit3d(true), wu(!0), ve("properties"));
+                return;
+              }
+              orbitTap.current = { key: $, at: now };
+            } else orbitTap.current = { key: "", at: 0 };
             if ($ === "t") return selectTool("text");
             const se = Object.keys(shortcuts).find((be) => shortcuts[be] === $);
             se && selectTool(se);
@@ -23335,6 +23517,145 @@ function cg() {
       Ea.current.clear();
     };
 
+  Y.useEffect(() => {
+    if (!Mt) return;
+    let alive = true;
+    gu("/api/library")
+      .then((data) => {
+        if (!alive || !data || !data.library) return;
+        const next = {
+          folders: Array.isArray(data.library.folders) ? data.library.folders : [],
+          items: Array.isArray(data.library.items) ? data.library.items : [],
+        };
+        setLibraryBox(next);
+        try {
+          localStorage.setItem(
+            framiaScopedKey(FRAMIA_LIBRARY_KEY, framiaAccountScope),
+            JSON.stringify(next),
+          );
+        } catch {}
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [Mt]);
+
+  const libPersist = (next) => {
+      setLibraryBox(next);
+      try {
+        localStorage.setItem(
+          framiaScopedKey(FRAMIA_LIBRARY_KEY, framiaAccountScope),
+          JSON.stringify(next),
+        );
+      } catch {}
+      Mt && gu("/api/library", "PUT", next).catch(() => {});
+    },
+    libDefaultName = (kind) => {
+      const stamp = new Date();
+      const two = (value) => String(value).padStart(2, "0");
+      return `${kind === "audio" ? "Áudio" : "Desenho"} ${two(stamp.getDate())}/${two(stamp.getMonth() + 1)} ${two(stamp.getHours())}:${two(stamp.getMinutes())}`;
+    },
+    libSaveSelection = (folderId) => {
+      const items = M && M.ids.length ? mt.filter((el) => M.ids.includes(el.id)) : mt;
+      if (!items.length) {
+        He(
+          Me === "en"
+            ? "Select something first"
+            : Me === "es"
+              ? "Selecciona algo primero"
+              : "Selecione algo primeiro",
+        );
+        return;
+      }
+      const url = framiaElementsDataUrl(items);
+      if (!url) return;
+      const name = libDefaultName("image"),
+        target = folderId === undefined ? libraryFolder : folderId,
+        item = {
+          id: Ke(),
+          name,
+          kind: "image",
+          url,
+          folderId: target || null,
+          createdAt: Date.now(),
+        };
+      libPersist({ ...libraryBox, items: [item, ...libraryBox.items] });
+      He(
+        Me === "en" ? "Saved to library" : Me === "es" ? "Guardado" : "Salvo na biblioteca",
+        name,
+      );
+    },
+    libSaveAudio = (clip) => {
+      if (!clip) return;
+      libPersist({
+        ...libraryBox,
+        items: [
+          {
+            id: Ke(),
+            name: clip.name || libDefaultName("audio"),
+            kind: "audio",
+            url: ji[clip.mediaId] || clip.url || "",
+            folderId: libraryFolder || null,
+            createdAt: Date.now(),
+          },
+          ...libraryBox.items,
+        ],
+      });
+      He(
+        Me === "en" ? "Audio saved" : Me === "es" ? "Audio guardado" : "Áudio salvo",
+        clip.name || "",
+      );
+    },
+    libNewFolder = () => {
+      const name = window.prompt(
+        Me === "en" ? "Folder name" : Me === "es" ? "Nombre de la carpeta" : "Nome da pasta",
+        Me === "en"
+          ? "Project"
+          : Me === "es"
+            ? "Proyecto"
+            : `Projeto ${libraryBox.folders.length + 1}`,
+      );
+      if (!name || !name.trim()) return;
+      const folder = { id: Ke(), name: name.trim().slice(0, 60) };
+      (libPersist({ ...libraryBox, folders: [...libraryBox.folders, folder] }),
+        setLibraryFolder(folder.id));
+    },
+    libDeleteFolder = (folderId) => {
+      libPersist({
+        folders: libraryBox.folders.filter((folder) => folder.id !== folderId),
+        items: libraryBox.items.map((item) =>
+          item.folderId === folderId ? { ...item, folderId: null } : item,
+        ),
+      });
+      setLibraryFolder((current) => (current === folderId ? null : current));
+    },
+    libDeleteItem = (itemId) =>
+      libPersist({
+        ...libraryBox,
+        items: libraryBox.items.filter((item) => item.id !== itemId),
+      }),
+    libMoveItem = (itemId, folderId) =>
+      libPersist({
+        ...libraryBox,
+        items: libraryBox.items.map((item) =>
+          item.id === itemId ? { ...item, folderId: folderId || null } : item,
+        ),
+      }),
+    libInsertSaved = async (item) => {
+      if (!item) return;
+      if (item.kind === "audio") {
+        if (!item.url) return He("Áudio indisponível neste navegador");
+        const blob = await (await fetch(item.url)).blob(),
+          file = new File([blob], `${item.name || "audio"}.webm`, {
+            type: blob.type || "audio/webm",
+          });
+        $c(file, "audio");
+        return;
+      }
+      libInsertMedia(item);
+    };
+
   const libraryMedia = (() => {
       const seen = new Set(),
         out = [];
@@ -24104,6 +24425,17 @@ function cg() {
             query: libQuery,
             width: libWidth,
             media: libraryMedia,
+            saved: libraryBox.items,
+            folders: libraryBox.folders,
+            activeFolder: libraryFolder,
+            onPickFolder: setLibraryFolder,
+            onSaveSelection: () => libSaveSelection(),
+            onSaveAudio: libSaveAudio,
+            onNewFolder: libNewFolder,
+            onDeleteFolder: libDeleteFolder,
+            onDeleteSaved: libDeleteItem,
+            onMoveSaved: libMoveItem,
+            onInsertSaved: libInsertSaved,
             clips: z.clips,
             fonts: libraryFonts,
             activeFont: framiaTextFont(),
@@ -24174,7 +24506,32 @@ function cg() {
                 r.createElement(
                   "button",
                   {
-                    className: "mini-toggle",
+                    className: `mini-toggle ${toolOptionsOpen ? "on" : ""}`,
+                    onClick: () => {
+                      setToolOptionsOpen((open) => {
+                        try {
+                          localStorage.setItem(
+                            "framia-tool-options",
+                            open ? "0" : "1",
+                          );
+                        } catch {}
+                        return !open;
+                      });
+                    },
+                    title:
+                      Me === "en"
+                        ? "Show or hide the tool options bar"
+                        : Me === "es"
+                          ? "Mostrar u ocultar la barra de la herramienta"
+                          : "Mostrar ou esconder a barra da ferramenta",
+                    "aria-pressed": toolOptionsOpen,
+                  },
+                  r.createElement(gp, { size: 15 }),
+                ),
+                r.createElement(
+                  "button",
+                  {
+                    className: "mini-icon",
                     onClick: () => Ve("onion"),
                     title: H.settings,
                   },
@@ -24733,6 +25090,22 @@ function cg() {
                   ),
                 ),
               r.createElement("div", { className: "canvas-grid" }),
+              orbit3d &&
+                r.createElement(
+                  "div",
+                  { className: "orbit-hint" },
+                  r.createElement(
+                    "b",
+                    null,
+                    Me === "en" ? "3D spin" : "Giro 3D",
+                  ),
+                  Me === "en"
+                    ? "drag to spin · Esc to exit"
+                    : Me === "es"
+                      ? "arrastra para girar · Esc para salir"
+                      : "arraste para girar · Esc para sair",
+                ),
+              toolOptionsOpen &&
               r.createElement(
                 "div",
                 { className: "tool-options", role: "toolbar", "aria-label": "Propriedades da ferramenta" },
@@ -26040,23 +26413,73 @@ function cg() {
             r.createElement(
               "div",
               { className: "track-labels" },
-              r.createElement(
-                "div",
-                { className: "track-name" },
-                r.createElement(Mi, { size: 14 }),
-                "Animação",
-              ),
-              r.createElement(
-                "div",
-                { className: "track-name" },
-                r.createElement(rm, { size: 14 }),
-                H.audio,
-              ),
-              r.createElement(
-                "div",
-                { className: "track-name" },
-                r.createElement(No, { size: 14 }),
-                H.video,
+              [
+                [
+                  "anim",
+                  Mi,
+                  "Animação",
+                  z.frames.length,
+                  Me === "en"
+                    ? "Show or hide the frames"
+                    : Me === "es"
+                      ? "Mostrar u ocultar los cuadros"
+                      : "Mostrar ou esconder os quadros",
+                ],
+                [
+                  "audio",
+                  rm,
+                  H.audio,
+                  z.clips.filter((clip) => clip.type === "audio").length,
+                  Me === "en"
+                    ? "Show or hide the audio clips"
+                    : Me === "es"
+                      ? "Mostrar u ocultar los audios"
+                      : "Mostrar ou esconder os áudios",
+                ],
+                [
+                  "video",
+                  No,
+                  H.video,
+                  z.clips.filter((clip) => clip.type === "video").length,
+                  Me === "en"
+                    ? "Show or hide the video clips"
+                    : Me === "es"
+                      ? "Mostrar u ocultar los videos"
+                      : "Mostrar ou esconder os vídeos",
+                ],
+              ].map(([track, Icon, text, count, hint]) =>
+                r.createElement(
+                  "button",
+                  {
+                    key: track,
+                    type: "button",
+                    className: `track-name ${trackOpen[track] === false ? "collapsed" : ""}`,
+                    title: hint,
+                    "aria-expanded": trackOpen[track] !== false,
+                    onClick: () =>
+                      setTrackOpen((current) => {
+                        const next = {
+                          ...current,
+                          [track]: current[track] === false,
+                        };
+                        try {
+                          localStorage.setItem(
+                            "framia-track-open",
+                            JSON.stringify(next),
+                          );
+                        } catch {}
+                        return next;
+                      }),
+                  },
+                  r.createElement(
+                    "span",
+                    { className: "track-caret" },
+                    trackOpen[track] === false ? "▸" : "▾",
+                  ),
+                  r.createElement(Icon, { size: 14 }),
+                  text,
+                  count > 0 && r.createElement("b", { className: "track-count" }, count),
+                ),
               ),
             ),
             r.createElement(
@@ -26084,7 +26507,7 @@ function cg() {
               r.createElement(
                 "div",
                 {
-                  className: "frame-track",
+                  className: `frame-track ${trackOpen.anim === false ? "collapsed" : ""}`,
                   style: { width: nn * ma },
                   onClick: (i) => {
                     i.target === i.currentTarget &&
@@ -26177,8 +26600,9 @@ function cg() {
                 r.createElement(
                   "div",
                   {
-                    className: "media-track",
+                    className: `media-track ${trackOpen[i] === false ? "collapsed" : ""}`,
                     key: i,
+                    "data-track": i,
                     style: { width: nn * ma },
                   },
                   z.clips
@@ -27617,11 +28041,11 @@ function cg() {
                                       depth: "Profundidade",
                                       save: "Salvar como meu tema",
                                       saved: "Meus temas",
-                                      paper: "Fundo do papel",
-                                      paperHint: "PNG, JPG, GIF ou MP4 atrás do desenho.",
+                                      paper: "Papel do quadro (atrás do desenho)",
+                                      paperHint: "PNG, JPG ou GIF aplicado atrás do desenho, em qualquer projeto.",
                                       paperAdd: "Escolher arquivo",
                                       paperRemove: "Remover fundo",
-                                      wallpaper: "Papel de parede do estúdio",
+                                      wallpaper: "Fundo do estúdio (interface)",
                                       wallpaperAdd: "Trocar papel de parede",
                                       wallpaperRemove: "Remover papel de parede",
                                       reset: "Voltar ao padrão",
@@ -27638,11 +28062,11 @@ function cg() {
                                       depth: "Depth",
                                       save: "Save as my theme",
                                       saved: "My themes",
-                                      paper: "Paper background",
-                                      paperHint: "PNG, JPG, GIF or MP4 behind the drawing.",
+                                      paper: "Canvas paper (behind the drawing)",
+                                      paperHint: "PNG, JPG or GIF drawn behind your art, in any project.",
                                       paperAdd: "Choose file",
                                       paperRemove: "Remove background",
-                                      wallpaper: "Studio wallpaper",
+                                      wallpaper: "Studio background (interface)",
                                       wallpaperAdd: "Change wallpaper",
                                       wallpaperRemove: "Remove wallpaper",
                                       reset: "Back to default",
@@ -27659,11 +28083,11 @@ function cg() {
                                       depth: "Profundidad",
                                       save: "Guardar como mi tema",
                                       saved: "Mis temas",
-                                      paper: "Fondo del papel",
-                                      paperHint: "PNG, JPG, GIF o MP4 detrás del dibujo.",
+                                      paper: "Papel del cuadro (detrás del dibujo)",
+                                      paperHint: "PNG, JPG o GIF detrás del dibujo, en cualquier proyecto.",
                                       paperAdd: "Elegir archivo",
                                       paperRemove: "Quitar fondo",
-                                      wallpaper: "Fondo del estudio",
+                                      wallpaper: "Fondo del estudio (interfaz)",
                                       wallpaperAdd: "Cambiar fondo",
                                       wallpaperRemove: "Quitar fondo",
                                       reset: "Volver al inicio",
@@ -28786,6 +29210,65 @@ function framiaExtrudeGeometry(el) {
   faces.sort((a, b) => a.depth - b.depth);
   return { points: p, faces, cx, cy };
 }
+const FRAMIA_PAPER_CACHE = new Map();
+function framiaPaperImage(url) {
+  if (!url || typeof url !== "string") return null;
+  let entry = FRAMIA_PAPER_CACHE.get(url);
+  if (!entry) {
+    const img = new Image();
+    entry = { img, ready: false, onReady: null };
+    img.onload = () => {
+      entry.ready = true;
+      entry.onReady && entry.onReady();
+    };
+    img.onerror = () => {
+      entry.ready = false;
+    };
+    img.src = url;
+    FRAMIA_PAPER_CACHE.set(url, entry);
+    if (FRAMIA_PAPER_CACHE.size > 6)
+      FRAMIA_PAPER_CACHE.delete(FRAMIA_PAPER_CACHE.keys().next().value);
+  }
+  return entry;
+}
+const FRAMIA_LIBRARY_KEY = "framia-library-v2";
+function framiaReadLibrary(scope) {
+  const empty = { folders: [], items: [] };
+  try {
+    const raw = JSON.parse(
+      localStorage.getItem(framiaScopedKey(FRAMIA_LIBRARY_KEY, scope)) || "null",
+    );
+    if (!raw || typeof raw !== "object") return empty;
+    return {
+      folders: Array.isArray(raw.folders) ? raw.folders : [],
+      items: Array.isArray(raw.items) ? raw.items : [],
+    };
+  } catch {
+    return empty;
+  }
+}
+function framiaElementsDataUrl(elements, maxSize = 900) {
+  const list = (elements || []).filter(Boolean);
+  if (!list.length) return "";
+  const box = jc(list);
+  if (!box || box.w <= 0 || box.h <= 0) return "";
+  const pad = Math.max(12, Math.min(box.w, box.h) * 0.06),
+    w = box.w + pad * 2,
+    h = box.h + pad * 2,
+    scale = Math.min(2, maxSize / Math.max(w, h)),
+    canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(w * scale));
+  canvas.height = Math.max(1, Math.round(h * scale));
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  ctx.translate(pad - box.x, pad - box.y);
+  for (const el of list) Eu(ctx, el);
+  try {
+    return canvas.toDataURL("image/png");
+  } catch {
+    return "";
+  }
+}
 function framiaShadeColor(hex, amount) {
   const rgb = framiaHexChannel(hex) || [124, 75, 240];
   const out = rgb.map((v) =>
@@ -29029,6 +29512,12 @@ function FramiaLibrary(props) {
   const filtered = media.filter((item) =>
     !query || String(item.name || "").toLowerCase().includes(query),
   );
+  const savedAll = p.saved || [];
+  const folders = p.folders || [];
+  const activeFolder = p.activeFolder || null;
+  const savedItems = savedAll.filter((item) =>
+    activeFolder ? item.folderId === activeFolder : true,
+  );
   const shapes = FRAMIA_SHAPES.filter(
     (shape) =>
       !query ||
@@ -29145,6 +29634,167 @@ function FramiaLibrary(props) {
         "div",
         { className: "lib-scroll" },
         p.tab === "media" &&
+          r.createElement(
+            "div",
+            { className: "lib-saved" },
+            r.createElement(
+              "div",
+              { className: "section-heading" },
+              r.createElement(
+                "span",
+                null,
+                label("Biblioteca", "Library", "Biblioteca"),
+              ),
+              r.createElement(
+                "button",
+                {
+                  className: "text-link",
+                  onClick: p.onSaveSelection,
+                  title: label(
+                    "Salvar o que está desenhado",
+                    "Save what is drawn",
+                    "Guardar lo dibujado",
+                  ),
+                },
+                label("＋ Salvar desenho", "＋ Save drawing", "＋ Guardar dibujo"),
+              ),
+            ),
+            r.createElement(
+              "div",
+              { className: "lib-folders" },
+              r.createElement(
+                "button",
+                {
+                  type: "button",
+                  className: activeFolder ? "lib-folder" : "lib-folder selected",
+                  onClick: () => p.onPickFolder(null),
+                },
+                label("Tudo", "All", "Todo"),
+              ),
+              folders.map((folder) =>
+                r.createElement(
+                  "span",
+                  { key: folder.id, className: "lib-folder-wrap" },
+                  r.createElement(
+                    "button",
+                    {
+                      type: "button",
+                      className:
+                        activeFolder === folder.id
+                          ? "lib-folder selected"
+                          : "lib-folder",
+                      onClick: () =>
+                        p.onPickFolder(
+                          activeFolder === folder.id ? null : folder.id,
+                        ),
+                    },
+                    folder.name,
+                  ),
+                  r.createElement(
+                    "button",
+                    {
+                      type: "button",
+                      className: "lib-folder-x",
+                      title: label("Remover pasta", "Delete folder", "Eliminar carpeta"),
+                      onClick: () => p.onDeleteFolder(folder.id),
+                    },
+                    "×",
+                  ),
+                ),
+              ),
+              r.createElement(
+                "button",
+                { type: "button", className: "lib-folder add", onClick: p.onNewFolder },
+                label("＋ Pasta", "＋ Folder", "＋ Carpeta"),
+              ),
+            ),
+            savedItems.length
+              ? r.createElement(
+                  "div",
+                  { className: "lib-grid" },
+                  savedItems.map((item) =>
+                    r.createElement(
+                      "div",
+                      { key: item.id, className: "lib-saved-item" },
+                      r.createElement(
+                        "button",
+                        {
+                          type: "button",
+                          className: "lib-item",
+                          title: item.name,
+                          onClick: () => p.onInsertSaved(item),
+                        },
+                        item.kind === "audio"
+                          ? r.createElement("i", { className: "lib-audio-badge" }, "♪")
+                          : r.createElement("img", { src: item.url, alt: "" }),
+                        r.createElement("span", null, item.name),
+                      ),
+                      r.createElement(
+                        "button",
+                        {
+                          type: "button",
+                          className: "lib-item-x",
+                          title: label("Remover", "Remove", "Quitar"),
+                          onClick: () => p.onDeleteSaved(item.id),
+                        },
+                        "×",
+                      ),
+                      folders.length > 0 &&
+                        r.createElement(
+                          "select",
+                          {
+                            className: "lib-item-folder",
+                            value: item.folderId || "",
+                            title: label("Mover para pasta", "Move to folder", "Mover a carpeta"),
+                            onChange: (event) =>
+                              p.onMoveSaved(item.id, event.target.value || null),
+                          },
+                          r.createElement(
+                            "option",
+                            { value: "" },
+                            label("Sem pasta", "No folder", "Sin carpeta"),
+                          ),
+                          folders.map((folder) =>
+                            r.createElement(
+                              "option",
+                              { key: folder.id, value: folder.id },
+                              folder.name,
+                            ),
+                          ),
+                        ),
+                    ),
+                  ),
+                )
+              : r.createElement(
+                  "div",
+                  { className: "lib-empty" },
+                  label(
+                    "Nada salvo ainda. Desenhe, selecione e clique em Salvar desenho.",
+                    "Nothing saved yet. Draw, select and hit Save drawing.",
+                    "Nada guardado todavía. Dibuja, selecciona y pulsa Guardar dibujo.",
+                  ),
+                ),
+          ),
+        p.tab === "media" &&
+          r.createElement(
+            "div",
+            { className: "section-heading lib-project-head" },
+            r.createElement(
+              "span",
+              null,
+              label("Neste projeto", "In this project", "En este proyecto"),
+            ),
+            r.createElement(
+              "small",
+              null,
+              label(
+                "não salvo na biblioteca",
+                "not saved to the library",
+                "no guardado en la biblioteca",
+              ),
+            ),
+          ),
+        p.tab === "media" &&
           (filtered.length
             ? r.createElement(
                 "div",
@@ -29255,14 +29905,31 @@ function FramiaLibrary(props) {
                 .filter((clip) => clip.type === "audio")
                 .map((clip) =>
                   r.createElement(
-                    "button",
-                    {
-                      key: clip.id,
-                      className: "lib-font",
-                      onClick: () => p.onSelectClip(clip.id),
-                    },
-                    r.createElement("span", null, clip.name || "Áudio"),
-                    r.createElement("small", null, `${Math.round(clip.duration)}s`),
+                    "div",
+                    { key: clip.id, className: "lib-audio-row" },
+                    r.createElement(
+                      "button",
+                      {
+                        className: "lib-font",
+                        onClick: () => p.onSelectClip(clip.id),
+                      },
+                      r.createElement("span", null, clip.name || "Áudio"),
+                      r.createElement("small", null, `${Math.round(clip.duration)}s`),
+                    ),
+                    r.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "lib-audio-save",
+                        title: label(
+                          "Salvar áudio na biblioteca",
+                          "Save audio to library",
+                          "Guardar audio en la biblioteca",
+                        ),
+                        onClick: () => p.onSaveAudio && p.onSaveAudio(clip),
+                      },
+                      "＋",
+                    ),
                   ),
                 )
             : r.createElement(
@@ -29486,9 +30153,9 @@ function FramiaTransformPanel(props) {
           "p",
           { className: "anim-hint" },
           label(
-            "Arraste o objeto com a ferramenta Transformar (T) para girar em 3D.",
-            "Drag the object with the Transform tool (T) to spin it in 3D.",
-            "Arrastra el objeto con Transformar (T) para girarlo en 3D.",
+            "Arraste o objeto para girar em 3D, ou toque duas vezes a tecla Transformar (T/V, ou R) para girar livre — como no Blender.",
+            "Drag the object to spin it in 3D, or double-tap the Transform key (T/V, or R) to spin freely — like Blender.",
+            "Arrastra el objeto para girarlo en 3D, o toca dos veces la tecla Transformar (T/V, o R) para girar libre.",
           ),
         ),
       ),
