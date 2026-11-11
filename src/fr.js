@@ -22861,6 +22861,21 @@ function cg() {
       ["path", { d: "M12 3l8 4.6v8.8L12 21l-8-4.6V7.6L12 3Z", key: "c3d-a" }],
       ["path", { d: "M12 12l8-4.4M12 12v9M12 12L4 7.6", key: "c3d-b" }],
     ]),
+    CaretIcon = de("ChevronDown", [
+      ["path", { d: "M6 9l6 6 6-6", key: "caret-a" }],
+    ]),
+    PlusIcon = de("Plus", [
+      ["path", { d: "M12 5v14", key: "plus-a" }],
+      ["path", { d: "M5 12h14", key: "plus-b" }],
+    ]),
+    UpIcon = de("ArrowUp", [
+      ["path", { d: "M12 19V5", key: "up-a" }],
+      ["path", { d: "M5 12l7-7 7 7", key: "up-b" }],
+    ]),
+    DownIcon = de("ArrowDown", [
+      ["path", { d: "M12 5v14", key: "down-a" }],
+      ["path", { d: "M19 12l-7 7-7-7", key: "down-b" }],
+    ]),
     Lu = [
       [Cp, "transform", H.transform, "V"],
       [
@@ -26601,11 +26616,15 @@ function cg() {
             index === 0 &&
               r.createElement(
                 "span",
-                { className: "track-caret" },
-                open ? "▾" : "▸",
+                { className: `track-caret${open ? "" : " collapsed"}` },
+                r.createElement(CaretIcon, { size: 12 }),
               ),
             r.createElement(Icon, { size: 14 }),
-            index === 0 ? name : `${name} ${index + 1}`,
+            r.createElement(
+              "span",
+              { className: "track-label-text" },
+              index === 0 ? name : `${name} ${index + 1}`,
+            ),
             index === 0 &&
               count > 0 &&
               r.createElement(
@@ -26630,7 +26649,7 @@ function cg() {
                     (event.stopPropagation(), addLaneTrack(key));
                   },
                 },
-                "＋",
+                r.createElement(PlusIcon, { size: 11 }),
               ),
           ),
         );
@@ -26786,22 +26805,61 @@ r.createElement(
     onPointerDown: (h) => {
       if (h.target.classList.contains("trim")) return;
       let startX = h.clientX,
-        base = clip.start;
-      (h.currentTarget.setPointerCapture(h.pointerId),
-        (h.currentTarget.onpointermove = (event) => {
-          let delta = (event.clientX - startX) / _a;
-          h.currentTarget.style.left = `${Math.max(0, base + delta) * _a}px`;
+        base = clip.start,
+        baseTrack = Number.isInteger(clip.track) ? clip.track : 0,
+        lane = baseTrack,
+        moved = false,
+        node = h.currentTarget;
+      const lanesOf = () => [
+          ...document.querySelectorAll(`.media-track[data-track="${clip.type}"]`),
+        ],
+        paintLane = (row) => {
+          for (const item of lanesOf())
+            item.classList.toggle("drop-lane", Number(item.dataset.row) === row);
+        };
+      (node.setPointerCapture(h.pointerId),
+        (node.onpointermove = (event) => {
+          const delta = (event.clientX - startX) / _a;
+          if (Math.abs(event.clientX - startX) > 2) moved = true;
+          node.style.left = `${Math.max(0, base + delta) * _a}px`;
+          const rows = lanesOf();
+          if (!rows.length) return;
+          const first = rows[0].getBoundingClientRect(),
+            last = rows[rows.length - 1].getBoundingClientRect();
+          let next = lane;
+          if (event.clientY < first.top) next = 0;
+          else if (event.clientY > last.bottom)
+            next = (Number(rows[rows.length - 1].dataset.row) || 0) + 1;
+          else
+            for (const row of rows) {
+              const box = row.getBoundingClientRect();
+              if (event.clientY >= box.top && event.clientY <= box.bottom) {
+                next = Number(row.dataset.row) || 0;
+                break;
+              }
+            }
+          if (next !== lane) {
+            lane = Math.max(0, next);
+            paintLane(lane);
+          }
         }),
-        (h.currentTarget.onpointerup = (event) => {
-          let delta = (event.clientX - startX) / _a;
-          (De(
-            (next) =>
-              (next.clips.find(
-                (item) => item.id === clip.id,
-              ).start = Math.max(0, base + delta)),
-          ),
-            (h.currentTarget.onpointermove = null),
-            (h.currentTarget.onpointerup = null));
+        (node.onpointerup = (event) => {
+          const delta = (event.clientX - startX) / _a;
+          ((node.onpointermove = null), (node.onpointerup = null), paintLane(-1));
+          if (!moved) {
+            node.style.left = "";
+            return;
+          }
+          De((next) => {
+            const target = next.clips.find((item) => item.id === clip.id);
+            if (!target) return;
+            target.start = Math.max(0, base + delta);
+            if (lane === baseTrack) return;
+            target.track = lane;
+            const lanes = { ...(next.lanes || {}) };
+            lanes[clip.type] = Math.max(Number(lanes[clip.type]) || 1, lane + 1);
+            next.lanes = lanes;
+          });
         }));
     },
   },
@@ -26884,9 +26942,10 @@ r.createElement(
                           : Me === "es"
                             ? "Mover el clip una pista arriba"
                             : "Mover o clipe uma trilha para cima",
+                      className: "step-button",
                       onClick: () => moveClipTrack(-1),
                     },
-                    r.createElement("b", null, "↑"),
+                    r.createElement(UpIcon, { size: 13 }),
                   ),
                   r.createElement(
                     "button",
@@ -26897,9 +26956,10 @@ r.createElement(
                           : Me === "es"
                             ? "Mover el clip una pista abajo"
                             : "Mover o clipe uma trilha para baixo",
+                      className: "step-button",
                       onClick: () => moveClipTrack(1),
                     },
-                    r.createElement("b", null, "↓"),
+                    r.createElement(DownIcon, { size: 13 }),
                   ),
                 ),
               r.createElement("span", { className: "action-sep" }),
