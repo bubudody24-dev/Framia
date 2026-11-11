@@ -29538,25 +29538,45 @@ const FRAMIA_SOURCE_TEX = new WeakMap();
 function framiaSourceTexture(el) {
   const src = el.source;
   if (!src || typeof src !== "object") return null;
-  const cached = FRAMIA_SOURCE_TEX.get(src);
-  if (cached) return cached;
-  const box = jc([src]);
-  if (!box || !(box.w > 0) || !(box.h > 0)) return null;
-  const scale = Math.min(2, 1600 / Math.max(box.w, box.h)),
-    canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(box.w * scale));
-  canvas.height = Math.max(1, Math.round(box.h * scale));
-  const paint = canvas.getContext("2d");
-  if (!paint) return null;
-  paint.scale(scale, scale);
-  paint.translate(-box.x, -box.y);
-  try {
-    Eu(paint, src);
-  } catch {
-    return null;
+  let entry = FRAMIA_SOURCE_TEX.get(src);
+  if (!entry) {
+    const box = jc([src]);
+    if (!box || !(box.w > 0) || !(box.h > 0)) return null;
+    const scale = Math.min(2, 1600 / Math.max(box.w, box.h)),
+      canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(box.w * scale));
+    canvas.height = Math.max(1, Math.round(box.h * scale));
+    entry = { canvas, box, scale, ready: src.type !== "image" };
+    FRAMIA_SOURCE_TEX.set(src, entry);
   }
-  const entry = { canvas, box, scale };
-  FRAMIA_SOURCE_TEX.set(src, entry);
+  if (!entry.ready) {
+    const image = src.type === "image" && Tm(src.src);
+    if (!image) return entry;
+    const paint = entry.canvas.getContext("2d");
+    if (!paint) return null;
+    paint.setTransform(1, 0, 0, 1, 0, 0);
+    paint.clearRect(0, 0, entry.canvas.width, entry.canvas.height);
+    paint.scale(entry.scale, entry.scale);
+    paint.translate(-entry.box.x, -entry.box.y);
+    try {
+      Eu(paint, src);
+      entry.ready = true;
+      FRAMIA_SIL_CACHE.delete(src);
+    } catch {
+      return null;
+    }
+  } else if (src.type !== "image" && !entry.painted) {
+    const paint = entry.canvas.getContext("2d");
+    if (!paint) return null;
+    paint.scale(entry.scale, entry.scale);
+    paint.translate(-entry.box.x, -entry.box.y);
+    try {
+      Eu(paint, src);
+      entry.painted = true;
+    } catch {
+      return null;
+    }
+  }
   return entry;
 }
 /* Silhouette: extrude the artwork's outline instead of its bounding box -- */
@@ -29603,29 +29623,46 @@ function framiaTriangulate(poly) {
   return out;
 }
 function framiaSimplifyLoop(points, tol) {
-  if (points.length < 5) return points;
-  const keep = new Uint8Array(points.length);
-  keep[0] = 1;
-  keep[points.length - 1] = 1;
-  const stack = [[0, points.length - 1]];
-  const far = (p, a, b) => {
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    return Math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / len;
-  };
-  while (stack.length) {
-    const [i0, i1] = stack.pop();
-    let at = -1, best = tol;
-    for (let i = i0 + 1; i < i1; i++) {
-      const d = far(points[i], points[i0], points[i1]);
-      if (d > best) { best = d; at = i; }
-    }
-    if (at > 0) {
-      keep[at] = 1;
-      stack.push([i0, at], [at, i1]);
+  let ring = points.slice();
+  if (
+    ring.length > 2 &&
+    ring[0].x === ring[ring.length - 1].x &&
+    ring[0].y === ring[ring.length - 1].y
+  )
+    ring.pop();
+  if (ring.length < 4) return ring;
+  const spaced = [];
+  for (const p of ring) {
+    const last = spaced[spaced.length - 1];
+    if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= tol) spaced.push(p);
+  }
+  if (
+    spaced.length > 3 &&
+    Math.hypot(
+      spaced[0].x - spaced[spaced.length - 1].x,
+      spaced[0].y - spaced[spaced.length - 1].y,
+    ) < tol
+  )
+    spaced.pop();
+  let changed = true,
+    guard = 4;
+  while (changed && guard-- > 0 && spaced.length > 3) {
+    changed = false;
+    for (let i = spaced.length - 1; i >= 0; i--) {
+      const a = spaced[(i + spaced.length - 1) % spaced.length],
+        b = spaced[i],
+        c = spaced[(i + 1) % spaced.length],
+        dx = c.x - a.x,
+        dy = c.y - a.y,
+        len = Math.hypot(dx, dy) || 1,
+        distance = Math.abs((b.x - a.x) * dy - (b.y - a.y) * dx) / len;
+      if (distance <= tol * 0.42) {
+        spaced.splice(i, 1);
+        changed = true;
+      }
     }
   }
-  return points.filter((_, i) => keep[i]);
+  return spaced;
 }
 function framiaSolidGrid(tex) {
   const cw = tex.canvas.width, ch = tex.canvas.height;
@@ -29745,7 +29782,7 @@ function framiaTraceLoop(cells, g) {
 }
 function framiaExtrudeSilhouette(el) {
   const src = el.source, tex = framiaSourceTexture(el);
-  if (!src || !tex || !tex.box || !tex.scale) return null;
+  if (!src || !tex || !tex.box || !tex.scale || !tex.ready) return null;
   const cached = FRAMIA_SIL_CACHE.get(src);
   if (cached !== undefined) return cached;
   const g = framiaSolidGrid(tex), box = tex.box;
@@ -29803,10 +29840,22 @@ function framiaExtrudePolyGeometry(el, sil) {
     const front = poly.map((p) => project(p.x - cx, p.y - cy, -hd)),
       back = poly.map((p) => project(p.x - cx, p.y - cy, hd)),
       uv = poly.map(uvAt),
-      tri = shape.tris.length ? shape.tris : framiaTriangulate(poly);
+      tri = shape.tris.length ? shape.tris : framiaTriangulate(poly),
+      frontQuad = [
+        project(-w / 2, -h / 2, -hd),
+        project(w / 2, -h / 2, -hd),
+        project(w / 2, h / 2, -hd),
+        project(-w / 2, h / 2, -hd),
+      ],
+      backQuad = [
+        project(-w / 2, -h / 2, hd),
+        project(w / 2, -h / 2, hd),
+        project(w / 2, h / 2, hd),
+        project(-w / 2, h / 2, hd),
+      ];
     points.push(...front, ...back);
-    faces.push({ pts: front, uv, tri, shade: 1.12, front: true, depth: meanZ(front) });
-    faces.push({ pts: back, uv, tri, shade: 0.7, depth: meanZ(back) });
+    faces.push({ pts: front, uv, tri, textureQuad: frontQuad, shade: 1.12, front: true, depth: meanZ(front) });
+    faces.push({ pts: back, uv, tri, textureQuad: backQuad, shade: 0.7, depth: meanZ(back) });
     for (let i = 0; i < poly.length; i++) {
       const j = (i + 1) % poly.length;
       const quad = [front[i], front[j], back[j], back[i]];
@@ -29940,6 +29989,19 @@ function framiaDrawExtrudeSource(ctx, el) {
   ctx.save();
   ctx.lineJoin = "round";
   for (const face of geo.faces) {
+    if (face.textureQuad && face.pts) {
+      ctx.save();
+      ctx.beginPath();
+      face.pts.forEach((pt, i) =>
+        i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y),
+      );
+      ctx.closePath();
+      ctx.clip();
+      ctx.filter = `brightness(${face.shade})`;
+      framiaDrawQuadTexture(ctx, tex.canvas, face.textureQuad, texCorners);
+      ctx.restore();
+      continue;
+    }
     if (face.uv && face.tri) {
       ctx.save();
       ctx.filter = `brightness(${face.shade})`;
