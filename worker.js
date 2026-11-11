@@ -30,6 +30,11 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS framia_profiles_username ON framia_profiles(username)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_friends (id TEXT PRIMARY KEY, requester TEXT NOT NULL, target TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_settings_v2 (owner TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at INTEGER NOT NULL)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_chat_servers (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, invite TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_chat_members (server_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY(server_id,user_id))'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_chat_channels (id TEXT PRIMARY KEY, server_id TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_chat_messages (id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, author TEXT NOT NULL, body TEXT NOT NULL, created_at INTEGER NOT NULL)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS framia_chat_messages_channel ON framia_chat_messages(channel_id,created_at)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS framia_library_v2 (owner TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at INTEGER NOT NULL)'),
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS framia_friends_pair ON framia_friends(requester,target)'),
   ]).catch((cause) => { schema = undefined; throw cause; });
@@ -130,6 +135,63 @@ async function api(request, env, signedIn) {
 
   try {
     if (path[1] === 'me' && request.method === 'GET') return json({ user });
+    if (path[1] === 'chat-servers') {
+      if (path.length === 2 && request.method === 'GET') {
+        const rows = await env.DB.prepare('SELECT s.id,s.name,s.invite,s.owner FROM framia_chat_servers s JOIN framia_chat_members m ON m.server_id=s.id WHERE m.user_id=? ORDER BY s.created_at DESC').bind(user.sub).all();
+        return json({ servers: rows.results });
+      }
+      if (path.length === 2 && request.method === 'POST') {
+        const body = await readJson(request, 1000);
+        const name = text(body?.name?.trim(), 60);
+        if (!name) return error('Server name required', 400);
+        const id = crypto.randomUUID();
+        const invite = roomCode();
+        const now = Date.now();
+        await env.DB.batch([
+          env.DB.prepare('INSERT INTO framia_chat_servers(id,owner,name,invite,created_at) VALUES(?,?,?,?,?)').bind(id, user.sub, name, invite, now),
+          env.DB.prepare('INSERT INTO framia_chat_members(server_id,user_id) VALUES(?,?)').bind(id, user.sub),
+          env.DB.prepare('INSERT INTO framia_chat_channels(id,server_id,name,created_at) VALUES(?,?,?,?)').bind(crypto.randomUUID(), id, 'geral', now),
+        ]);
+        return json({ id, invite }, 201);
+      }
+      if (path.length === 3 && path[2] === 'join' && request.method === 'POST') {
+        const body = await readJson(request, 1000);
+        const invite = String(body?.invite || '').trim().toUpperCase();
+        const server = await env.DB.prepare('SELECT id FROM framia_chat_servers WHERE invite=?').bind(invite).first();
+        if (!server) return error('Invalid invite', 404);
+        await env.DB.prepare('INSERT OR IGNORE INTO framia_chat_members(server_id,user_id) VALUES(?,?)').bind(server.id,user.sub).run();
+        return json({ id: server.id });
+      }
+      if (path.length === 3 && request.method === 'GET') {
+        if (!await env.DB.prepare('SELECT 1 FROM framia_chat_members WHERE server_id=? AND user_id=?').bind(path[2],user.sub).first()) return error('Server not found',404);
+        const channels = await env.DB.prepare('SELECT id,name FROM framia_chat_channels WHERE server_id=? ORDER BY created_at').bind(path[2]).all();
+        return json({ channels: channels.results });
+      }
+      if (path.length === 4 && path[3] === 'channels' && request.method === 'POST') {
+        if (!await env.DB.prepare('SELECT 1 FROM framia_chat_servers WHERE id=? AND owner=?').bind(path[2],user.sub).first()) return error('Owner required',403);
+        const body = await readJson(request, 1000);
+        const name = text(body?.name?.trim(),40);
+        if (!name) return error('Channel name required',400);
+        const id = crypto.randomUUID();
+        await env.DB.prepare('INSERT INTO framia_chat_channels(id,server_id,name,created_at) VALUES(?,?,?,?)').bind(id,path[2],name,Date.now()).run();
+        return json({ id },201);
+      }
+    }
+    if (path[1] === 'chat-channels' && path.length === 4 && path[3] === 'messages') {
+      const channel = await env.DB.prepare('SELECT server_id FROM framia_chat_channels WHERE id=?').bind(path[2]).first();
+      if (!channel || !await env.DB.prepare('SELECT 1 FROM framia_chat_members WHERE server_id=? AND user_id=?').bind(channel.server_id,user.sub).first()) return error('Channel not found',404);
+      if (request.method === 'GET') {
+        const rows = await env.DB.prepare('SELECT m.id,m.body,m.created_at,p.display_name,p.username FROM framia_chat_messages m LEFT JOIN framia_profiles p ON p.user_id=m.author WHERE m.channel_id=? ORDER BY m.created_at DESC LIMIT 100').bind(path[2]).all();
+        return json({ messages: rows.results.reverse() });
+      }
+      if (request.method === 'POST') {
+        const data = await readJson(request,5000);
+        const body = text(data?.body?.trim(),2000);
+        if (!body) return error('Message required',400);
+        await env.DB.prepare('INSERT INTO framia_chat_messages(id,channel_id,author,body,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),path[2],user.sub,body,Date.now()).run();
+        return json({ ok: true },201);
+      }
+    }
     if (path[1] === 'projects') {
       if (path.length === 2 && request.method === 'GET') {
         const rows = await env.DB.prepare('SELECT id,name,width,height,frames,updated_at FROM framia_projects_v2 WHERE owner=? ORDER BY updated_at DESC').bind(user.sub).all();
@@ -369,10 +431,10 @@ async function api(request, env, signedIn) {
       const key = `wallpaper/${user.sub}`;
       if (request.method === 'POST') {
         const type = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-        if (!/^image\/(png|jpeg|webp|avif)$/.test(type)) return error('Unsupported wallpaper type', 415);
+        if (!/^(image\/(png|jpeg|webp|avif|gif)|video\/(mp4|webm))$/.test(type)) return error('Unsupported wallpaper type', 415);
         const buffer = await request.arrayBuffer();
         if (!buffer.byteLength) return error('Empty wallpaper', 400);
-        if (buffer.byteLength > 8_000_000) return error('Wallpaper too large', 413);
+        if (buffer.byteLength > 30_000_000) return error('Wallpaper too large', 413);
         await env.FILES.put(key, buffer, { httpMetadata: { contentType: type, cacheControl: 'private, max-age=86400' } });
         return json({ wallpaper: { url: `/api/wallpaper?v=${Date.now()}`, type, size: buffer.byteLength } });
       }

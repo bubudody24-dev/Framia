@@ -17229,6 +17229,7 @@ function framiaThemeFields(source) {
   if (typeof raw.background === "string" && raw.background.length < 400000) {
     out.background = raw.background;
     if (raw.wallpaperName) out.wallpaperName = String(raw.wallpaperName).slice(0, 120);
+    if (raw.backgroundType) out.backgroundType = String(raw.backgroundType).slice(0, 40);
   }
   if (raw.paperMedia && typeof raw.paperMedia.url === "string")
     out.paperMedia = {
@@ -17246,7 +17247,7 @@ function framiaReadTheme() {
     );
     if (!saved.id && !saved.accent) return framiaThemeDefaults();
     const preset = FRAMIA_THEME_PRESETS.find((p) => p.id === saved.id) || null;
-    if (preset && !saved.custom) return { ...framiaThemeDefaults(), ...preset };
+    if (preset && !saved.custom) return { ...framiaThemeDefaults(), ...preset, background: saved.background || "", backgroundType: saved.backgroundType || "", wallpaperName: saved.wallpaperName || "", paperMedia: saved.paperMedia || null };
     return { ...framiaThemeDefaults(), ...saved, custom: !0 };
   } catch {
     return framiaThemeDefaults();
@@ -19400,6 +19401,14 @@ function cg() {
     }),
     [Oa, ul] = Y.useState("home"),
     [Jl, Nl] = Y.useState([]),
+    [selectedProjects, setSelectedProjects] = Y.useState([]),
+    [homeMode, setHomeMode] = Y.useState("drawing"),
+    [chatServers, setChatServers] = Y.useState([]),
+    [chatServer, setChatServer] = Y.useState(null),
+    [chatChannels, setChatChannels] = Y.useState([]),
+    [chatChannel, setChatChannel] = Y.useState(null),
+    [chatMessages, setChatMessages] = Y.useState([]),
+    [chatDraft, setChatDraft] = Y.useState(""),
     [ra, il] = Y.useState({ width: 1920, height: 1080 }),
     [Fl, $l] = Y.useState("Meu projeto"),
     [yt, Ou] = Y.useState("saved"),
@@ -19838,6 +19847,33 @@ function cg() {
       } catch {}
     }, [Bi]),
     Y.useEffect(() => {
+      setChatServers([]); setChatServer(null); setChatChannels([]); setChatChannel(null); setChatMessages([]);
+    }, [Mt?.sub]),
+    Y.useEffect(() => {
+      if (homeMode !== "conversation" || !Mt) return;
+      let active = true;
+      gu("/api/chat-servers").then((data) => active && setChatServers(data.servers || [])).catch(() => active && He("Não foi possível carregar servidores"));
+      return () => { active = false; };
+    }, [homeMode, Mt]),
+    Y.useEffect(() => {
+      if (!chatServer || homeMode !== "conversation") return;
+      let active = true;
+      gu(`/api/chat-servers/${encodeURIComponent(chatServer)}`).then((data) => {
+        if (!active) return;
+        setChatChannels(data.channels || []);
+        setChatChannel((id) => (data.channels || []).some((c) => c.id === id) ? id : data.channels?.[0]?.id || null);
+      }).catch(() => active && He("Não foi possível carregar canais"));
+      return () => { active = false; };
+    }, [chatServer, homeMode]),
+    Y.useEffect(() => {
+      if (!chatChannel || homeMode !== "conversation") return;
+      let active = true;
+      const load = () => gu(`/api/chat-channels/${encodeURIComponent(chatChannel)}/messages`).then((data) => { if (active) setChatMessages(data.messages || []); }).catch(() => {});
+      load();
+      const interval = setInterval(load, 5000);
+      return () => { active = false; clearInterval(interval); };
+    }, [chatChannel, homeMode]),
+    Y.useEffect(() => {
       if (!Mt) return void setSettingsReady(!0);
       let active = !0;
       setSettingsReady(!1);
@@ -19856,6 +19892,12 @@ function cg() {
         active = !1;
       };
     }, [Mt]),
+    Y.useEffect(() => {
+      if (!Mt || !settingsReady || !ft.background || !ft.background.startsWith("/api/wallpaper")) return;
+      fetch(ft.background, { credentials: "same-origin" }).then((res) => {
+        if (!res.ok) He("Fundo do estúdio indisponível", "Escolha o arquivo novamente para sincronizá-lo.");
+      }).catch(() => {});
+    }, [Mt, settingsReady, ft.background]),
     Y.useEffect(() => {
       if (!Mt || !settingsReady) return;
       const timer = setTimeout(() => {
@@ -23019,7 +23061,10 @@ function cg() {
             });
             const ot = be.find((Ua) => Ua.id === s.id);
             F(ot.start / z.fps);
-          } else Be || (ta(null), F(s.start / z.fps));
+          } else if (!Be) {
+            if (!i.shiftKey) ta(null);
+            F(s.start / z.fps);
+          }
         };
       ((y.onpointermove = et),
         (y.onpointerup = (nt) => dt(nt)),
@@ -24023,7 +24068,59 @@ function cg() {
             r.createElement("h1", null, xt.title),
             r.createElement("p", null, xt.subtitle),
           ),
-          r.createElement(
+          r.createElement("div", { className: "home-mode-tabs" },
+            r.createElement("button", { className: homeMode === "drawing" ? "active" : "", onClick: () => setHomeMode("drawing") }, Me === "en" ? "Drawing" : Me === "es" ? "Dibujo" : "Desenho"),
+            r.createElement("button", { className: homeMode === "conversation" ? "active" : "", onClick: () => setHomeMode("conversation") }, Me === "en" ? "Conversation" : Me === "es" ? "Conversación" : "Conversa"),
+          ),
+          homeMode === "conversation" ? r.createElement("div", { className: "conversation-intro" },
+            r.createElement("h2", null, Me === "en" ? "Your conversations" : Me === "es" ? "Tus conversaciones" : "Suas conversas"),
+            !Mt ? r.createElement("p", null, Me === "en" ? "Sign in with Freebuff to join conversations." : Me === "es" ? "Inicia sesión con Freebuff para conversar." : "Entre com Freebuff para participar das conversas.") :
+            r.createElement("div", { className: "conversation-layout" },
+              r.createElement("aside", { className: "conversation-servers" },
+                chatServers.map((server) => r.createElement("button", { key: server.id, className: chatServer === server.id ? "active" : "", onClick: () => setChatServer(server.id), title: server.name }, server.name)),
+                r.createElement("button", { onClick: async () => {
+                  const name = window.prompt(Me === "en" ? "Server name" : Me === "es" ? "Nombre del servidor" : "Nome do servidor");
+                  if (!name?.trim()) return;
+                  try { const created = await gu("/api/chat-servers", "POST", { name: name.trim() });
+                    const data = await gu("/api/chat-servers"); setChatServers(data.servers || []); setChatServer(created.id);
+                  } catch { He("Não foi possível criar servidor"); }
+                } }, "+ ", Me === "en" ? "Create server" : Me === "es" ? "Crear servidor" : "Criar servidor"),
+                r.createElement("button", { onClick: async () => {
+                  const invite = window.prompt(Me === "en" ? "Invite code" : Me === "es" ? "Código de invitación" : "Código de convite");
+                  if (!invite?.trim()) return;
+                  try { const joined = await gu("/api/chat-servers/join", "POST", { invite: invite.trim() });
+                    const data = await gu("/api/chat-servers"); setChatServers(data.servers || []); setChatServer(joined.id);
+                  } catch { He("Convite inválido ou servidor indisponível"); }
+                } }, Me === "en" ? "Join by code" : Me === "es" ? "Unirse con código" : "Entrar com código"),
+              ),
+              r.createElement("aside", { className: "conversation-channels" },
+                chatServer && r.createElement("div", { className: "conversation-invite" },
+                  chatServers.find((s) => s.id === chatServer)?.name,
+                  r.createElement("button", { onClick: () => navigator.clipboard.writeText(chatServers.find((s) => s.id === chatServer)?.invite || "").then(() => He("Convite copiado")).catch(() => He("Não foi possível copiar")) }, Me === "en" ? "Copy invite" : Me === "es" ? "Copiar invitación" : "Copiar convite")),
+                chatChannels.map((channel) => r.createElement("button", { key: channel.id, className: chatChannel === channel.id ? "active" : "", onClick: () => setChatChannel(channel.id) }, "# ", channel.name)),
+                chatServer && chatServers.find((server) => server.id === chatServer)?.owner === Mt.sub && r.createElement("button", { onClick: async () => {
+                  const name = window.prompt(Me === "en" ? "Channel name" : Me === "es" ? "Nombre del canal" : "Nome do canal");
+                  if (!name?.trim()) return;
+                  try { await gu(`/api/chat-servers/${encodeURIComponent(chatServer)}/channels`, "POST", { name: name.trim() });
+                    const data = await gu(`/api/chat-servers/${encodeURIComponent(chatServer)}`); setChatChannels(data.channels || []);
+                  } catch { He("Não foi possível criar canal"); }
+                } }, "+ ", Me === "en" ? "Channel" : Me === "es" ? "Canal" : "Canal"),
+              ),
+              r.createElement("section", { className: "conversation-chat" },
+                r.createElement("h3", null, chatChannels.find((c) => c.id === chatChannel)?.name || (Me === "en" ? "Choose a channel" : Me === "es" ? "Elige un canal" : "Escolha um canal")),
+                r.createElement("div", { className: "conversation-messages" }, chatMessages.map((message) => r.createElement("div", { key: message.id, className: "conversation-message" },
+                  r.createElement("b", null, message.display_name || message.username || "Framia"),
+                  r.createElement("time", null, new Date(message.created_at).toLocaleString(Me === "pt" ? "pt-BR" : Me === "es" ? "es-ES" : "en-US")),
+                  r.createElement("p", null, message.body)))),
+                chatChannel && r.createElement("form", { onSubmit: async (event) => { event.preventDefault();
+                  if (!chatDraft.trim()) return;
+                  try { await gu(`/api/chat-channels/${encodeURIComponent(chatChannel)}/messages`, "POST", { body: chatDraft.trim() });
+                    setChatDraft(""); const data = await gu(`/api/chat-channels/${encodeURIComponent(chatChannel)}/messages`); setChatMessages(data.messages || []);
+                  } catch { He("Mensagem não enviada"); }
+                } }, r.createElement("input", { value: chatDraft, maxLength: 2000, onChange: (event) => setChatDraft(event.target.value), placeholder: Me === "en" ? "Write a message" : Me === "es" ? "Escribe un mensaje" : "Escreva uma mensagem" }), r.createElement("button", { type: "submit", disabled: !chatDraft.trim() }, H.send)),
+              ),
+            ),
+          ) : r.createElement(
             "div",
             { className: "home-create" },
             r.createElement(
@@ -24052,7 +24149,7 @@ function cg() {
               [
                 [1920, 1080, "Full HD", "16:9"],
                 [1280, 720, "HD", "16:9"],
-                [1080, 1080, "Quadrado", "1:1"],
+                [1080, 1080, Me === "en" ? "Square" : Me === "es" ? "Cuadrado" : "Quadrado", "1:1"],
                 [1080, 1920, "Vertical", "9:16"],
               ].map(([i, s, h, y]) =>
                 r.createElement(
@@ -24124,18 +24221,18 @@ function cg() {
               ),
             ),
           ),
-          r.createElement(
+          homeMode === "drawing" && r.createElement(
             "div",
             { className: "home-room" },
             r.createElement(mm, { size: 19 }),
             r.createElement(
               "div",
               null,
-              r.createElement("b", null, "Sala multiplayer"),
+              r.createElement("b", null, Me === "en" ? "Multiplayer room" : Me === "es" ? "Sala multijugador" : "Sala multiplayer"),
               r.createElement(
                 "small",
                 null,
-                "Compartilhe um código para desenhar e editar juntos.",
+                Me === "en" ? "Share a code to draw and edit together." : Me === "es" ? "Comparte un código para dibujar y editar juntos." : "Compartilhe um código para desenhar e editar juntos.",
               ),
             ),
             r.createElement(
@@ -24151,16 +24248,16 @@ function cg() {
             r.createElement("input", {
               maxLength: 8,
               value: zl,
-              placeholder: "Código da sala",
+              placeholder: Me === "en" ? "Room code" : Me === "es" ? "Código de sala" : "Código da sala",
               onChange: (i) => Ln(i.target.value.toUpperCase()),
             }),
             r.createElement(
               "button",
               { disabled: ![6, 8].includes(zl.trim().length), onClick: tr },
-              "Entrar",
+              Me === "en" ? "Join" : Me === "es" ? "Entrar" : "Entrar",
             ),
           ),
-          r.createElement(
+          homeMode === "drawing" && r.createElement(
             "div",
             { className: "home-library-head" },
             r.createElement(
@@ -24176,19 +24273,39 @@ function cg() {
               xt.import,
             ),
           ),
-          Jl.length
+          homeMode === "drawing" && selectedProjects.length > 0 && r.createElement("div", { className: "home-selection-actions" },
+            r.createElement("span", null, `${selectedProjects.length} ${Me === "en" ? "selected" : Me === "es" ? "seleccionados" : "selecionados"}`),
+            r.createElement("button", { onClick: () => setSelectedProjects([]) }, Me === "en" ? "Clear selection" : Me === "es" ? "Limpiar selección" : "Limpar seleção"),
+            r.createElement("button", { className: "danger", onClick: async () => {
+              if (!window.confirm(`${xt.remove}: ${selectedProjects.length}?`)) return;
+              try {
+                for (const id of selectedProjects) {
+                  if (Mt) await gu(`/api/projects/${encodeURIComponent(id)}`, "DELETE");
+                  await $p(id);
+                }
+                setSelectedProjects([]); Nl(await Qn());
+              } catch { Nl(await Qn()); He("Não foi possível excluir todos os projetos"); }
+            } }, `${xt.remove} (${selectedProjects.length})`),
+          ),
+          homeMode === "drawing" && (Jl.length
             ? r.createElement(
                 "div",
                 { className: "home-project-grid" },
                 Jl.map((i) =>
                   r.createElement(
                     "div",
-                    { className: "home-project", key: i.id },
+                    { className: `home-project ${selectedProjects.includes(i.id) ? "selected" : ""}`, key: i.id },
+                    r.createElement("label", { className: "home-project-select", onClick: (event) => event.stopPropagation() },
+                      r.createElement("input", { type: "checkbox", checked: selectedProjects.includes(i.id), "aria-label": `${Me === "en" ? "Select" : Me === "es" ? "Seleccionar" : "Selecionar"} ${i.name}`, onChange: (event) => setSelectedProjects((ids) => event.target.checked ? [...ids, i.id] : ids.filter((id) => id !== i.id)) }),
+                    ),
                     r.createElement(
                       "button",
                       {
                         className: "home-project-open",
-                        onClick: () => Go(i.id),
+                        onClick: (event) => {
+                          if (event.shiftKey) { setSelectedProjects((ids) => ids.includes(i.id) ? ids.filter((id) => id !== i.id) : [...ids, i.id]); return; }
+                          Go(i.id);
+                        },
                       },
                       r.createElement(
                         "span",
@@ -24234,18 +24351,13 @@ function cg() {
                         className: "home-project-delete",
                         title: xt.remove,
                         onClick: async () => {
-                          if (window.confirm(`${xt.remove}: ${i.name}?`)) {
-                            if ((await $p(i.id), Mt))
-                              try {
-                                await gu(
-                                  `/api/projects/${encodeURIComponent(i.id)}`,
-                                  "DELETE",
-                                );
-                              } catch {
-                                He("Não foi possível excluir na nuvem");
-                              }
+                          if (!window.confirm(`${xt.remove}: ${i.name}?`)) return;
+                          try {
+                            if (Mt) await gu(`/api/projects/${encodeURIComponent(i.id)}`, "DELETE");
+                            await $p(i.id);
                             Nl(await Qn());
-                          }
+                            setSelectedProjects((ids) => ids.filter((id) => id !== i.id));
+                          } catch { He("Não foi possível excluir o projeto"); }
                         },
                       },
                       r.createElement(Hc, { size: 15 }),
@@ -24258,7 +24370,7 @@ function cg() {
                 { className: "home-empty" },
                 r.createElement(v1, { size: 26 }),
                 r.createElement("span", null, xt.empty),
-              ),
+              )),
         ),
         ca &&
           r.createElement(
@@ -24278,12 +24390,14 @@ function cg() {
         {
           className: `app ${ka ? "canvas-only" : ""} ${simpleMode ? "simple-mode" : ""} ${mobilePanel ? "mobile-panel" : ""}`,
           style: {
-            "--app-bg": ft.background ? `url(${ft.background})` : "none",
+            "--app-bg": ft.background && !ft.backgroundType?.startsWith("video/") ? `url(${ft.background})` : "none",
             "--paper-image": ft.paperMedia
               ? `url(${ft.paperMedia.url})`
               : "none",
           },
         },
+        ft.background && ft.backgroundType?.startsWith("video/") &&
+          r.createElement("video", { className: "studio-background-video", src: ft.background, autoPlay: true, muted: true, loop: true, playsInline: true }),
         r.createElement("input", {
           ref: xl,
           type: "file",
@@ -24333,16 +24447,15 @@ function cg() {
         r.createElement("input", {
           ref: Zc,
           type: "file",
-          accept: "image/*",
+          accept: "image/png,image/jpeg,image/webp,image/gif,image/avif,video/mp4,video/webm",
           hidden: !0,
           onChange: async (i) => {
-            let s = i.target.files[0];
-            if (!s) return;
+            const file = i.target.files[0];
+            if (!file) return;
             i.target.value = "";
-            let url = await framiaUploadWallpaper(s);
-            if (!url) url = await framiaDownscaleImage(s, 1600, 0.82);
-            url &&
-              Qa((y) => ({ ...y, background: url, wallpaperName: s.name }));
+            const url = Mt ? await framiaUploadWallpaper(file) : file.type === "image/gif" || file.type.startsWith("video/") ? await framiaFileDataUrl(file) : await framiaDownscaleImage(file, 1600, 0.82);
+            if (!url) { He("Fundo não aplicado", "Confira o formato, o tamanho ou a conexão e tente novamente."); return; }
+            Qa((theme) => ({ ...theme, background: url, backgroundType: file.type, wallpaperName: file.name }));
           },
         }),
         r.createElement(
@@ -24572,19 +24685,6 @@ function cg() {
               ),
             ),
             r.createElement("div", { className: "rail-spacer" }),
-            r.createElement(
-              "div",
-              { className: "rail-group" },
-              r.createElement(
-                "button",
-                {
-                  className: "tool",
-                  title: H.image,
-                  onClick: () => Fa.current.click(),
-                },
-                r.createElement(Ni, { size: 19 }),
-              ),
-            ),
           ),
           r.createElement(FramiaLibrary, {
             lang: Me,
@@ -26842,15 +26942,16 @@ function cg() {
                     {
                       key: i.id,
                       "data-frame-id": i.id,
-                      className: `frame-cell ${i.id === (ze == null ? void 0 : ze.id) ? "selected" : ""} ${v ? "frame-preview" : ""} ${ma < 46 ? "compact" : ""} ${ma < 22 ? "tiny" : ""}`,
+                      className: `frame-cell ${i.id === (ze == null ? void 0 : ze.id) && !Tt ? "selected" : ""} ${v ? "frame-preview" : ""} ${ma < 46 ? "compact" : ""} ${ma < 22 ? "tiny" : ""}`,
                       style: { left: i.start * ma, width: ma * Jt(i) },
                       onPointerDown: (h) => Zi(h, i),
-                      onClick: () => {
+                      onClick: (event) => {
                         if (g.current) {
                           g.current = !1;
                           return;
                         }
-                        (ta(null), F(i.start / z.fps));
+                        if (!event.shiftKey) ta(null);
+                        F(i.start / z.fps);
                       },
                     },
                     r.createElement(
@@ -26927,7 +27028,10 @@ r.createElement(
       left: clip.start * _a,
       width: clip.duration * _a,
     },
-    onClick: () => ta(clip.id),
+    onClick: (event) => {
+      if (!event.shiftKey) { B(null); ia(null); rt(null); }
+      ta(clip.id);
+    },
     onPointerDown: (h) => {
       if (h.target.classList.contains("trim")) return;
       let startX = h.clientX,
@@ -28518,6 +28622,8 @@ r.createElement(
                                           Qa({
                                             ...preset,
                                             background: ft.background,
+                                            backgroundType: ft.backgroundType,
+                                            wallpaperName: ft.wallpaperName,
                                             paperMedia: ft.paperMedia,
                                             darkness: ft.darkness,
                                             weight: ft.weight,
@@ -28741,6 +28847,7 @@ r.createElement(
                                         Qa((current) => ({
                                           ...framiaThemeDefaults(),
                                           background: current.background,
+                                          backgroundType: current.backgroundType,
                                           paperMedia: current.paperMedia,
                                         }));
                                       },
@@ -28892,6 +28999,8 @@ r.createElement(
                                           Qa((current) => ({
                                             ...current,
                                             background: "",
+                                            backgroundType: "",
+                                            wallpaperName: "",
                                           })),
                                       },
                                       th.wallpaperRemove,
@@ -29445,6 +29554,14 @@ function FramiaColorPicker({ value, onChange, label, className }) {
 
 /* Theme wallpaper: goes to R2 so the setting stays tiny and syncs across
    devices instead of blowing the localStorage quota. --------------------- */
+function framiaFileDataUrl(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(file);
+  });
+}
 async function framiaUploadWallpaper(file) {
   try {
     const response = await fetch("/api/wallpaper", {
@@ -30350,6 +30467,7 @@ const FRAMIA_SHAPES = [
   { kind: "star", pt: "Estrela", en: "Star", es: "Estrella" },
   { kind: "arrow", pt: "Seta", en: "Arrow", es: "Flecha" },
 ];
+const FRAMIA_STICKERS = ["⭐", "❤️", "🔥", "🎨", "✨", "🎵", "💬", "🌙", "🌸", "🎉", "💡", "☁️"];
 const FRAMIA_TEXT_PRESETS = [
   { pt: "Título", en: "Title", es: "Título", size: 132, weight: 800 },
   { pt: "Subtítulo", en: "Subtitle", es: "Subtítulo", size: 76, weight: 700 },
@@ -30855,24 +30973,15 @@ function FramiaLibrary(props) {
                   "Nada aquí todavía. Sube una imagen para empezar.",
                 ),
               )),
-        p.tab === "elements" &&
-          r.createElement(
-            "div",
-            { className: "lib-shapes" },
-            shapes.map((shape) =>
-              r.createElement(
-                "button",
-                {
-                  key: shape.kind,
-                  className: "lib-shape",
-                  onClick: () => p.onInsertShape(shape.kind),
-                  title: shape[lang] || shape.pt,
-                },
-                r.createElement("i", null, shape.kind[0].toUpperCase()),
-                r.createElement("span", null, shape[lang] || shape.pt),
-              ),
-            ),
-          ),
+        p.tab === "elements" && r.createElement(r.Fragment, null,
+          r.createElement("div", { className: "section-heading" }, label("Formas", "Shapes", "Formas")),
+          r.createElement("div", { className: "lib-shapes" }, shapes.map((shape) =>
+            r.createElement("button", { key: shape.kind, className: "lib-shape", onClick: () => p.onInsertShape(shape.kind), title: shape[lang] || shape.pt },
+              r.createElement("i", null, shape.kind[0].toUpperCase()), r.createElement("span", null, shape[lang] || shape.pt)))),
+          r.createElement("div", { className: "section-heading", style: { marginTop: 12 } }, label("Adesivos", "Stickers", "Pegatinas")),
+          r.createElement("div", { className: "lib-stickers" }, FRAMIA_STICKERS.map((sticker) =>
+            r.createElement("button", { key: sticker, title: sticker, onClick: () => p.onInsertText({ pt: sticker, en: sticker, es: sticker, size: 120, weight: 700 }) }, sticker))),
+        ),
         p.tab === "text" &&
           r.createElement(
             r.Fragment,
