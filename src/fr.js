@@ -19316,6 +19316,12 @@ function cg() {
     [fontTick, setFontTick] = Y.useState(0),
     [inspectorTab, setInspectorTab] = Y.useState("properties"),
     [orbit3d, setOrbit3d] = Y.useState(false),
+    [simpleMode, setSimpleMode] = Y.useState(() =>
+      typeof window !== "undefined" && window.matchMedia
+        ? window.matchMedia("(max-width: 760px)").matches
+        : false,
+    ),
+    [mobilePanel, setMobilePanel] = Y.useState(false),
     [libraryBox, setLibraryBox] = Y.useState(() => framiaReadLibrary(framiaAccountScope)),
     [libraryFolder, setLibraryFolder] = Y.useState(null),
     [toolOptionsOpen, setToolOptionsOpen] = Y.useState(() => {
@@ -21691,6 +21697,47 @@ function cg() {
       let i = Math.max(0, P - 1);
       (F(Ti(z.frames, i) / z.fps), le(i));
     },
+    toggleTrack = (key) =>
+      setTrackOpen((current) => {
+        const next = { ...current, [key]: current[key] === false };
+        try {
+          localStorage.setItem("framia-track-open", JSON.stringify(next));
+        } catch {}
+        return next;
+      }),
+    laneCount = (key) => {
+      if (key === "anim") return 1;
+      const saved = Number((z.lanes || {})[key]) || 1,
+        used = (z.clips || [])
+          .filter((clip) => clip.type === key)
+          .reduce(
+            (max, clip) =>
+              Math.max(
+                max,
+                (Number.isInteger(clip.track) ? clip.track : 0) + 1,
+              ),
+            0,
+          );
+      return Math.max(1, saved, used);
+    },
+    addLaneTrack = (key) => {
+      if (key === "anim") return;
+      De((next) => {
+        next.lanes = {
+          ...(next.lanes || {}),
+          [key]: (Number((next.lanes || {})[key]) || 1) + 1,
+        };
+      });
+    },
+    moveClipTrack = (delta) => {
+      if (!Tt) return;
+      De((next) => {
+        const clip = next.clips.find((item) => item.id === Tt);
+        if (!clip) return;
+        const base = Number.isInteger(clip.track) ? clip.track : 0;
+        clip.track = Math.max(0, base + delta);
+      });
+    },
     slotDelete = () => {
       if (Tt) {
         De((s) => (s.clips = s.clips.filter((c) => c.id !== Tt)));
@@ -22542,6 +22589,8 @@ function cg() {
       deleteFrame: () => ju(),
       deleteClip: () => slotDelete(),
       setOrbit: (on) => setOrbit3d(!!on),
+      simpleMode: () => simpleMode,
+      setPanel: (on) => setMobilePanel(!!on),
       clearOrbit: () => setOrbit3d(false),
       setBackground: (color) => De((next) => (next.background = color)),
       library: () => libraryBox,
@@ -22553,6 +22602,17 @@ function cg() {
         return folder;
       },
       pickFolder: (id) => setLibraryFolder(id || null),
+      addLane: (kind) => addLaneTrack(kind),
+      moveClip: (delta) => moveClipTrack(delta),
+      importAudio: async (dataUrl, name) => {
+        const blob = await (await fetch(dataUrl)).blob();
+        $c(
+          new File([blob], name || "audio.wav", {
+            type: blob.type || "audio/wav",
+          }),
+          "audio",
+        );
+      },
       setPaper: (url, name) =>
         Qa((theme) => ({
           ...theme,
@@ -23518,6 +23578,19 @@ function cg() {
     };
 
   Y.useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const query = window.matchMedia("(max-width: 760px)"),
+      apply = () => setSimpleMode(query.matches);
+    return (
+      apply(),
+      query.addEventListener && query.addEventListener("change", apply),
+      () => {
+        query.removeEventListener && query.removeEventListener("change", apply);
+      }
+    );
+  }, []);
+
+  Y.useEffect(() => {
     if (!Mt) return;
     let alive = true;
     gu("/api/library")
@@ -23586,8 +23659,23 @@ function cg() {
         name,
       );
     },
-    libSaveAudio = (clip) => {
+    libSaveAudio = async (clip) => {
       if (!clip) return;
+      const source = ji[clip.mediaId] || clip.url || "";
+      let durable = source;
+      if (source && !source.startsWith("data:"))
+        try {
+          const blob = await (await fetch(source)).blob();
+          durable = await new Promise((resolve) => {
+            const reader = new FileReader();
+            ((reader.onload = () => resolve(String(reader.result || ""))),
+              (reader.onerror = () => resolve("")),
+              reader.readAsDataURL(blob));
+          });
+        } catch {
+          durable = "";
+        }
+      if (!durable) return He("Áudio indisponível neste navegador");
       libPersist({
         ...libraryBox,
         items: [
@@ -23595,7 +23683,7 @@ function cg() {
             id: Ke(),
             name: clip.name || libDefaultName("audio"),
             kind: "audio",
-            url: ji[clip.mediaId] || clip.url || "",
+            url: durable,
             folderId: libraryFolder || null,
             createdAt: Date.now(),
           },
@@ -23644,16 +23732,22 @@ function cg() {
       }),
     libInsertSaved = async (item) => {
       if (!item) return;
-      if (item.kind === "audio") {
-        if (!item.url) return He("Áudio indisponível neste navegador");
-        const blob = await (await fetch(item.url)).blob(),
-          file = new File([blob], `${item.name || "audio"}.webm`, {
-            type: blob.type || "audio/webm",
-          });
-        $c(file, "audio");
-        return;
+      try {
+        if (item.kind === "audio") {
+          if (!item.url) return He("Áudio indisponível neste navegador");
+          const blob = await (await fetch(item.url)).blob(),
+            base = item.name || "audio",
+            name = /\.[a-z0-9]{2,5}$/i.test(base) ? base : `${base}.webm`,
+            file = new File([blob], name, {
+              type: blob.type || "audio/webm",
+            });
+          $c(file, "audio");
+          return;
+        }
+        libInsertMedia(item);
+      } catch {
+        He("Não foi possível inserir o item", item.name || "");
       }
-      libInsertMedia(item);
     };
 
   const libraryMedia = (() => {
@@ -24089,7 +24183,7 @@ function cg() {
     : r.createElement(
         "div",
         {
-          className: `app ${ka ? "canvas-only" : ""}`,
+          className: `app ${ka ? "canvas-only" : ""} ${simpleMode ? "simple-mode" : ""} ${mobilePanel ? "mobile-panel" : ""}`,
           style: {
             "--app-bg": ft.background ? `url(${ft.background})` : "none",
             "--paper-image": ft.paperMedia
@@ -24497,6 +24591,25 @@ function cg() {
                 r.createElement(
                   "button",
                   {
+                    className: `mini-toggle only-simple ${mobilePanel ? "on" : ""}`,
+                    onClick: () => {
+                      if (mobilePanel) setMobilePanel(false);
+                      else (wu(true), setMobilePanel(true));
+                    },
+                    title:
+                      Me === "en"
+                        ? "Inspector"
+                        : Me === "es"
+                          ? "Inspector"
+                          : "Inspetor",
+                    "aria-pressed": mobilePanel,
+                  },
+                  r.createElement(sm, { size: 15 }),
+                  Me === "en" ? "Inspector" : "Inspetor",
+                ),
+                r.createElement(
+                  "button",
+                  {
                     className: `mini-toggle ${Yt ? "on" : ""}`,
                     onClick: () => ga((i) => !i),
                   },
@@ -24506,7 +24619,7 @@ function cg() {
                 r.createElement(
                   "button",
                   {
-                    className: `mini-toggle ${toolOptionsOpen ? "on" : ""}`,
+                    className: `mini-toggle tool-options-toggle ${toolOptionsOpen ? "on" : ""}`,
                     onClick: () => {
                       setToolOptionsOpen((open) => {
                         try {
@@ -26412,76 +26525,95 @@ function cg() {
             { className: "timeline-content" },
             r.createElement(
               "div",
-              { className: "track-labels" },
-              [
-                [
-                  "anim",
-                  Mi,
-                  "Animação",
-                  z.frames.length,
-                  Me === "en"
-                    ? "Show or hide the frames"
-                    : Me === "es"
-                      ? "Mostrar u ocultar los cuadros"
-                      : "Mostrar ou esconder os quadros",
-                ],
-                [
-                  "audio",
-                  rm,
-                  H.audio,
-                  z.clips.filter((clip) => clip.type === "audio").length,
-                  Me === "en"
-                    ? "Show or hide the audio clips"
-                    : Me === "es"
-                      ? "Mostrar u ocultar los audios"
-                      : "Mostrar ou esconder os áudios",
-                ],
-                [
-                  "video",
-                  No,
-                  H.video,
-                  z.clips.filter((clip) => clip.type === "video").length,
-                  Me === "en"
-                    ? "Show or hide the video clips"
-                    : Me === "es"
-                      ? "Mostrar u ocultar los videos"
-                      : "Mostrar ou esconder os vídeos",
-                ],
-              ].map(([track, Icon, text, count, hint]) =>
-                r.createElement(
-                  "button",
-                  {
-                    key: track,
-                    type: "button",
-                    className: `track-name ${trackOpen[track] === false ? "collapsed" : ""}`,
-                    title: hint,
-                    "aria-expanded": trackOpen[track] !== false,
-                    onClick: () =>
-                      setTrackOpen((current) => {
-                        const next = {
-                          ...current,
-                          [track]: current[track] === false,
-                        };
-                        try {
-                          localStorage.setItem(
-                            "framia-track-open",
-                            JSON.stringify(next),
-                          );
-                        } catch {}
-                        return next;
-                      }),
-                  },
-                  r.createElement(
-                    "span",
-                    { className: "track-caret" },
-                    trackOpen[track] === false ? "▸" : "▾",
-                  ),
-                  r.createElement(Icon, { size: 14 }),
-                  text,
-                  count > 0 && r.createElement("b", { className: "track-count" }, count),
-                ),
+  { className: "track-labels" },
+  (() => {
+    const lanes = [
+      ["anim", Mi, "Animação", z.frames.length],
+      [
+        "audio",
+        rm,
+        H.audio,
+        z.clips.filter((clip) => clip.type === "audio").length,
+      ],
+      [
+        "video",
+        No,
+        H.video,
+        z.clips.filter((clip) => clip.type === "video").length,
+      ],
+    ];
+    const out = [];
+    for (const [key, Icon, name, count] of lanes) {
+      const open = trackOpen[key] !== false,
+        rows = open ? laneCount(key) : 1;
+      for (let index = 0; index < rows; index++) {
+        out.push(
+          r.createElement(
+            "button",
+            {
+              key: `${key}-${index}`,
+              type: "button",
+              className: `track-name ${open ? "" : "collapsed"}${index ? " sub" : ""}`,
+              "aria-expanded": open,
+              title:
+                index || key === "anim"
+                  ? name
+                  : open
+                    ? Me === "en"
+                      ? "Collapse"
+                      : Me === "es"
+                        ? "Contraer"
+                        : "Recolher"
+                    : Me === "en"
+                      ? "Expand"
+                      : Me === "es"
+                        ? "Expandir"
+                        : "Expandir",
+              onClick: () => {
+                index === 0 && toggleTrack(key);
+              },
+            },
+            index === 0 &&
+              r.createElement(
+                "span",
+                { className: "track-caret" },
+                open ? "▾" : "▸",
               ),
-            ),
+            r.createElement(Icon, { size: 14 }),
+            index === 0 ? name : `${name} ${index + 1}`,
+            index === 0 &&
+              count > 0 &&
+              r.createElement(
+                "b",
+                { className: "track-count" },
+                count,
+              ),
+            index === 0 &&
+              open &&
+              key !== "anim" &&
+              r.createElement(
+                "span",
+                {
+                  className: "track-plus",
+                  title:
+                    Me === "en"
+                      ? "Add another track"
+                      : Me === "es"
+                        ? "Añadir otra pista"
+                        : "Adicionar outra trilha",
+                  onClick: (event) => {
+                    (event.stopPropagation(), addLaneTrack(key));
+                  },
+                },
+                "＋",
+              ),
+          ),
+        );
+      }
+    }
+    return out;
+  })(),
+),
             r.createElement(
               "div",
               {
@@ -26596,85 +26728,97 @@ function cg() {
                   ),
                 ),
               ),
-              ["audio", "video"].map((i) =>
-                r.createElement(
-                  "div",
-                  {
-                    className: `media-track ${trackOpen[i] === false ? "collapsed" : ""}`,
-                    key: i,
-                    "data-track": i,
-                    style: { width: nn * ma },
-                  },
-                  z.clips
-                    .filter((s) => s.type === i)
-                    .map((s) =>
-                      r.createElement(
-                        "div",
-                        {
-                          key: s.id,
-                          className: `clip ${s.type} ${Tt === s.id ? "selected" : ""}`,
-                          style: { left: s.start * _a, width: s.duration * _a },
-                          onClick: () => ta(s.id),
-                          onPointerDown: (h) => {
-                            if (h.target.classList.contains("trim")) return;
-                            let y = h.clientX,
-                              R = s.start;
-                            (h.currentTarget.setPointerCapture(h.pointerId),
-                              (h.currentTarget.onpointermove = (U) => {
-                                let X = (U.clientX - y) / _a;
-                                h.currentTarget.style.left = `${Math.max(0, R + X) * _a}px`;
-                              }),
-                              (h.currentTarget.onpointerup = (U) => {
-                                let X = (U.clientX - y) / _a;
-                                (De(
-                                  ($) =>
-                                    ($.clips.find(
-                                      (se) => se.id === s.id,
-                                    ).start = Math.max(0, R + X)),
-                                ),
-                                  (h.currentTarget.onpointermove = null),
-                                  (h.currentTarget.onpointerup = null));
-                              }));
-                          },
-                        },
-                        r.createElement("span", {
-                          className: "trim left",
-                          onPointerDown: (h) => {
-                            h.stopPropagation();
-                            let y = h.clientX;
-                            (h.currentTarget.setPointerCapture(h.pointerId),
-                              (h.currentTarget.onpointerup = (R) => {
-                                (Ic(s.id, "left", R.clientX - y),
-                                  (h.currentTarget.onpointerup = null));
-                              }));
-                          },
-                        }),
-                        i === "audio"
-                          ? r.createElement(rm, { size: 13 })
-                          : r.createElement(No, { size: 13 }),
-                        r.createElement(
-                          "span",
-                          { className: "clip-name" },
-                          s.name,
-                        ),
-                        r.createElement("span", {
-                          className: "trim right",
-                          onPointerDown: (h) => {
-                            h.stopPropagation();
-                            let y = h.clientX;
-                            (h.currentTarget.setPointerCapture(h.pointerId),
-                              (h.currentTarget.onpointerup = (R) => {
-                                (Ic(s.id, "right", R.clientX - y),
-                                  (h.currentTarget.onpointerup = null));
-                              }));
-                          },
-                        }),
-                      ),
-                    ),
-                ),
-              ),
-            ),
+["audio", "video"].flatMap((kind) => {
+  const open = trackOpen[kind] !== false,
+    rows = open ? laneCount(kind) : 1;
+  return Array.from({ length: rows }, (_, row) =>
+    r.createElement(
+      "div",
+      {
+        className: `media-track ${open ? "" : "collapsed"}`,
+        key: `${kind}-${row}`,
+        "data-track": kind,
+        "data-row": row,
+        style: { width: nn * ma },
+      },
+      z.clips
+        .filter(
+          (clip) =>
+            clip.type === kind &&
+            (Number.isInteger(clip.track) ? clip.track : 0) === row,
+        )
+        .map((clip) =>
+r.createElement(
+  "div",
+  {
+    key: clip.id,
+    className: `clip ${clip.type} ${Tt === clip.id ? "selected" : ""}`,
+    style: {
+      left: clip.start * _a,
+      width: clip.duration * _a,
+    },
+    onClick: () => ta(clip.id),
+    onPointerDown: (h) => {
+      if (h.target.classList.contains("trim")) return;
+      let startX = h.clientX,
+        base = clip.start;
+      (h.currentTarget.setPointerCapture(h.pointerId),
+        (h.currentTarget.onpointermove = (event) => {
+          let delta = (event.clientX - startX) / _a;
+          h.currentTarget.style.left = `${Math.max(0, base + delta) * _a}px`;
+        }),
+        (h.currentTarget.onpointerup = (event) => {
+          let delta = (event.clientX - startX) / _a;
+          (De(
+            (next) =>
+              (next.clips.find(
+                (item) => item.id === clip.id,
+              ).start = Math.max(0, base + delta)),
           ),
+            (h.currentTarget.onpointermove = null),
+            (h.currentTarget.onpointerup = null));
+        }));
+    },
+  },
+  r.createElement("span", {
+    className: "trim left",
+    onPointerDown: (h) => {
+      h.stopPropagation();
+      let startX = h.clientX;
+      (h.currentTarget.setPointerCapture(h.pointerId),
+        (h.currentTarget.onpointerup = (event) => {
+          (Ic(clip.id, "left", event.clientX - startX),
+            (h.currentTarget.onpointerup = null));
+        }));
+    },
+  }),
+  kind === "audio"
+    ? r.createElement(rm, { size: 13 })
+    : r.createElement(No, { size: 13 }),
+  r.createElement(
+    "span",
+    { className: "clip-name" },
+    clip.name,
+  ),
+  r.createElement("span", {
+    className: "trim right",
+    onPointerDown: (h) => {
+      h.stopPropagation();
+      let startX = h.clientX;
+      (h.currentTarget.setPointerCapture(h.pointerId),
+        (h.currentTarget.onpointerup = (event) => {
+          (Ic(clip.id, "right", event.clientX - startX),
+            (h.currentTarget.onpointerup = null));
+        }));
+    },
+  }),
+),
+            ),
+        ),
+      );
+    }),
+  ),
+),
           r.createElement(
             "div",
             { className: "timeline-actions" },
@@ -26702,6 +26846,37 @@ function cg() {
                 r.createElement(Hc, { size: 14 }),
                 H.delete,
               ),
+              Tt &&
+                r.createElement(
+                  r.Fragment,
+                  null,
+                  r.createElement(
+                    "button",
+                    {
+                      title:
+                        Me === "en"
+                          ? "Move clip one track up"
+                          : Me === "es"
+                            ? "Mover el clip una pista arriba"
+                            : "Mover o clipe uma trilha para cima",
+                      onClick: () => moveClipTrack(-1),
+                    },
+                    r.createElement("b", null, "↑"),
+                  ),
+                  r.createElement(
+                    "button",
+                    {
+                      title:
+                        Me === "en"
+                          ? "Move clip one track down"
+                          : Me === "es"
+                            ? "Mover el clip una pista abajo"
+                            : "Mover o clipe uma trilha para baixo",
+                      onClick: () => moveClipTrack(1),
+                    },
+                    r.createElement("b", null, "↓"),
+                  ),
+                ),
               r.createElement("span", { className: "action-sep" }),
               r.createElement(
                 "button",
@@ -29900,6 +30075,52 @@ function FramiaLibrary(props) {
             ),
           ),
         p.tab === "audio" &&
+          savedAll.filter((item) => item.kind === "audio").length > 0 &&
+          r.createElement(
+            r.Fragment,
+            null,
+            r.createElement(
+              "div",
+              { className: "section-heading lib-project-head" },
+              r.createElement(
+                "span",
+                null,
+                label("Salvos na biblioteca", "Saved in library", "Guardados"),
+              ),
+            ),
+            savedAll
+              .filter((item) => item.kind === "audio")
+              .map((item) =>
+                r.createElement(
+                  "div",
+                  { key: item.id, className: "lib-audio-row" },
+                  r.createElement(
+                    "button",
+                    {
+                      className: "lib-font",
+                      onClick: () => p.onInsertSaved(item),
+                    },
+                    r.createElement("span", null, item.name),
+                    r.createElement(
+                      "small",
+                      null,
+                      label("inserir", "insert", "insertar"),
+                    ),
+                  ),
+                  r.createElement(
+                    "button",
+                    {
+                      type: "button",
+                      className: "lib-audio-save",
+                      title: label("Remover", "Remove", "Quitar"),
+                      onClick: () => p.onDeleteSaved(item.id),
+                    },
+                    "\u00d7",
+                  ),
+                ),
+              ),
+          ),
+        p.tab === "audio" &&
           ((p.clips || []).filter((clip) => clip.type === "audio").length
             ? (p.clips || [])
                 .filter((clip) => clip.type === "audio")
@@ -29913,8 +30134,12 @@ function FramiaLibrary(props) {
                         className: "lib-font",
                         onClick: () => p.onSelectClip(clip.id),
                       },
-                      r.createElement("span", null, clip.name || "Áudio"),
-                      r.createElement("small", null, `${Math.round(clip.duration)}s`),
+                      r.createElement("span", null, clip.name || "\u00c1udio"),
+                      r.createElement(
+                        "small",
+                        null,
+                        `${Math.round(clip.duration)}s`,
+                      ),
                     ),
                     r.createElement(
                       "button",
@@ -29922,13 +30147,13 @@ function FramiaLibrary(props) {
                         type: "button",
                         className: "lib-audio-save",
                         title: label(
-                          "Salvar áudio na biblioteca",
+                          "Salvar \u00e1udio na biblioteca",
                           "Save audio to library",
                           "Guardar audio en la biblioteca",
                         ),
                         onClick: () => p.onSaveAudio && p.onSaveAudio(clip),
                       },
-                      "＋",
+                      "\uff0b",
                     ),
                   ),
                 )
@@ -29936,9 +30161,9 @@ function FramiaLibrary(props) {
                 "div",
                 { className: "lib-empty" },
                 label(
-                  "Nenhum áudio importado.",
+                  "Nenhum \u00e1udio importado.",
                   "No audio imported yet.",
-                  "Ningún audio importado.",
+                  "Ning\u00fan audio importado.",
                 ),
               )),
         p.tab === "layers" && p.layersNode,
