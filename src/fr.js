@@ -17126,10 +17126,10 @@ function framiaThemeColor(value, ctx) {
   return framiaHslToHex(h, s, l, color.a);
 }
 const FRAMIA_WEIGHT_STEPS = {
-  light: [250, 300, 350],
-  regular: [400, 450, 500],
-  medium: [550, 600, 650],
-  bold: [750, 800, 850],
+  light: [300, 400, 500],
+  regular: [400, 500, 600],
+  medium: [500, 600, 700],
+  bold: [600, 700, 800],
 };
 function framiaWeightVars(weight) {
   const step = weight === -1 || weight === 1 ? (weight === -1 ? 0 : 2) : 1;
@@ -17137,6 +17137,7 @@ function framiaWeightVars(weight) {
     "--fw-light": String(FRAMIA_WEIGHT_STEPS.light[step]),
     "--fw-regular": String(FRAMIA_WEIGHT_STEPS.regular[step]),
     "--fw-medium": String(FRAMIA_WEIGHT_STEPS.medium[step]),
+    "--fw-semibold": String(FRAMIA_WEIGHT_STEPS.medium[Math.min(2, step + 1)]),
     "--fw-bold": String(FRAMIA_WEIGHT_STEPS.bold[step]),
     "--fw-shift": String(step - 1),
   };
@@ -17166,6 +17167,7 @@ function framiaCompileTheme(theme) {
   vars["--timeline-bg"] = framiaThemeColor(t.timeline || "#181920", ctx);
   vars["--toolbar-bg"] = framiaThemeColor(t.toolbar || "#191a23", ctx);
   vars["--paper"] = t.paper || "#ffffff";
+  vars["--font-ui"] = `"${String(t.fontUi || "Manrope").replace(/["\\]/g, "")}", Manrope, sans-serif`;
   vars["--accent-contrast"] = "#ffffff";
   Object.assign(vars, framiaWeightVars(Number.isFinite(t.weight) ? t.weight : 0));
   return vars;
@@ -17193,6 +17195,8 @@ function framiaThemeFields(source) {
     if (Number.isFinite(raw[key])) out[key] = raw[key];
   });
   if (typeof raw.paper === "string") out.paper = raw.paper;
+  if (typeof raw.fontUi === "string" && raw.fontUi.length < 80)
+    out.fontUi = raw.fontUi.replace(/["\\]/g, "");
   if (typeof raw.background === "string" && raw.background.length < 400000) {
     out.background = raw.background;
     if (raw.wallpaperName) out.wallpaperName = String(raw.wallpaperName).slice(0, 120);
@@ -19918,16 +19922,19 @@ function cg() {
     Y.useLayoutEffect(() => {
       const i = Cl.current;
       if (!i) return;
-      let s = i.getContext("2d", { alpha: !1 });
+      let s = i.getContext("2d", { alpha: !0 });
+      const livePaper = ft.paperMedia && /^(image\/gif|video\/)/i.test(String(ft.paperMedia.type || ""));
       (i.width !== z.width && (i.width = z.width),
         i.height !== z.height && (i.height = z.height),
         (s.globalAlpha = 1),
         (s.globalCompositeOperation = "source-over"),
-        s.clearRect(0, 0, i.width, i.height),
-        (s.fillStyle = z.background || "#ffffff"),
-        s.fillRect(0, 0, i.width, i.height));
+        s.clearRect(0, 0, i.width, i.height));
+      if (!livePaper) {
+        s.fillStyle = z.background || "#ffffff";
+        s.fillRect(0, 0, i.width, i.height);
+      }
       const paper =
-        ft.paperMedia && !String(ft.paperMedia.type || "").startsWith("video")
+        ft.paperMedia && !livePaper
           ? framiaPaperImage(ft.paperMedia.url)
           : null;
       if (paper) {
@@ -21931,6 +21938,7 @@ function cg() {
           sourceDuration: Math.max(0.1, R),
         };
         (De((et) => et.clips.push(be)), ta(be.id), He(H.import, i.name));
+        if (s === "audio") libSaveClip(be, i);
       }
     },
     qu = () => {
@@ -23690,42 +23698,53 @@ function cg() {
         name,
       );
     },
-    libSaveAudio = async (clip) => {
+    libSaveClip = async (clip, originalFile = null) => {
       if (!clip) return;
       const source = ji[clip.mediaId] || clip.url || "";
-      let durable = source;
-      if (source && !source.startsWith("data:"))
+      let blob = originalFile;
+      if (!blob && source)
         try {
-          const blob = await (await fetch(source)).blob();
-          durable = await new Promise((resolve) => {
-            const reader = new FileReader();
-            ((reader.onload = () => resolve(String(reader.result || ""))),
-              (reader.onerror = () => resolve("")),
-              reader.readAsDataURL(blob));
+          blob = await (await fetch(source)).blob();
+        } catch {}
+      if (!blob) return He("Mídia indisponível neste navegador");
+      let durable = "";
+      const itemId = Ke();
+      if (Mt)
+        try {
+          const response = await fetch(`/api/library/media/${encodeURIComponent(itemId)}`, {
+            method: "PUT",
+            credentials: "same-origin",
+            headers: { "content-type": blob.type || (clip.type === "video" ? "video/webm" : "audio/webm") },
+            body: blob,
           });
-        } catch {
-          durable = "";
-        }
-      if (!durable) return He("Áudio indisponível neste navegador");
+          if (response.ok) durable = `/api/library/media/${encodeURIComponent(itemId)}`;
+        } catch {}
+      if (!durable) {
+        if (blob.size > 7e6)
+          return He("Arquivo grande para a biblioteca local", "Entre na sua conta para salvar mídias de até 25 MB.");
+        durable = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => resolve("");
+          reader.readAsDataURL(blob);
+        });
+      }
+      if (!durable) return He("Não foi possível salvar a mídia");
+      const kind = clip.type === "video" ? "video" : "audio";
       libPersist({
         ...libraryBox,
-        items: [
-          {
-            id: Ke(),
-            name: clip.name || libDefaultName("audio"),
-            kind: "audio",
-            url: durable,
-            folderId: libraryFolder || null,
-            createdAt: Date.now(),
-          },
-          ...libraryBox.items,
-        ],
+        items: [{
+          id: itemId,
+          name: clip.name || libDefaultName(kind),
+          kind,
+          url: durable,
+          folderId: libraryFolder || null,
+          createdAt: Date.now(),
+        }, ...libraryBox.items],
       });
-      He(
-        Me === "en" ? "Audio saved" : Me === "es" ? "Audio guardado" : "Áudio salvo",
-        clip.name || "",
-      );
+      He(kind === "video" ? "Vídeo salvo na biblioteca" : "Áudio salvo na biblioteca", clip.name || "");
     },
+    libSaveAudio = (clip) => libSaveClip(clip),
     libNewFolder = () => {
       const name = window.prompt(
         Me === "en" ? "Folder name" : Me === "es" ? "Nombre de la carpeta" : "Nome da pasta",
@@ -23764,15 +23783,16 @@ function cg() {
     libInsertSaved = async (item) => {
       if (!item) return;
       try {
-        if (item.kind === "audio") {
-          if (!item.url) return He("Áudio indisponível neste navegador");
+        if (item.kind === "audio" || item.kind === "video") {
+          if (!item.url) return He("Mídia indisponível neste navegador");
           const blob = await (await fetch(item.url)).blob(),
-            base = item.name || "audio",
-            name = /\.[a-z0-9]{2,5}$/i.test(base) ? base : `${base}.webm`,
+            kind = item.kind,
+            base = item.name || kind,
+            name = /\.[a-z0-9]{2,5}$/i.test(base) ? base : `${base}.${kind === "video" ? "webm" : "webm"}`,
             file = new File([blob], name, {
-              type: blob.type || "audio/webm",
+              type: blob.type || `${kind}/webm`,
             });
-          $c(file, "audio");
+          $c(file, kind);
           return;
         }
         libInsertMedia(item);
@@ -24556,6 +24576,7 @@ function cg() {
             onPickFolder: setLibraryFolder,
             onSaveSelection: () => libSaveSelection(),
             onSaveAudio: libSaveAudio,
+            onSaveVideo: (clip) => libSaveClip(clip),
             onNewFolder: libNewFolder,
             onDeleteFolder: libDeleteFolder,
             onDeleteSaved: libDeleteItem,
@@ -24578,7 +24599,7 @@ function cg() {
             onQuery: setLibQuery,
             onResize: libResize,
             onUpload: (kind) =>
-              (kind === "audio" ? qi : Fa).current.click(),
+              (kind === "audio" ? qi : kind === "video" ? Yi : Fa).current.click(),
             onInsertMedia: libInsertMedia,
             onInsertShape: libInsertShape,
             onInsertText: libInsertText,
@@ -25367,6 +25388,25 @@ function cg() {
                     label: H.color,
                     className: "option-color",
                   }),
+                (pe === "brush" || pe === "eraser" || pe === "smudge" || pe === "line") &&
+                  r.createElement(
+                    "div",
+                    { className: "option-symmetry", title: H.symmetry },
+                    [["none", "—"], ["horizontal", "↔"], ["vertical", "↕"], ["both", "✣"]].map(([mode, icon]) =>
+                      r.createElement(
+                        "button",
+                        {
+                          key: mode,
+                          type: "button",
+                          className: we === mode ? "selected" : "",
+                          title: `${H.symmetry}: ${H[mode]}`,
+                          "aria-label": `${H.symmetry}: ${H[mode]}`,
+                          onClick: () => Ge(mode),
+                        },
+                        icon,
+                      ),
+                    ),
+                  ),
               ),
               r.createElement(
                 "div",
@@ -25463,11 +25503,22 @@ function cg() {
                     ),
                   ),
                 ft.paperMedia &&
-                  r.createElement("div", {
-                    className: "paper-media",
-                    "aria-hidden": "true",
-                    style: { backgroundImage: `url(${ft.paperMedia.url})` },
-                  }),
+                  (String(ft.paperMedia.type || "").startsWith("video")
+                    ? r.createElement("video", {
+                        className: "paper-media",
+                        "aria-hidden": "true",
+                        src: ft.paperMedia.url,
+                        autoPlay: true,
+                        muted: true,
+                        loop: true,
+                        playsInline: true,
+                      })
+                    : r.createElement("img", {
+                        className: "paper-media",
+                        "aria-hidden": "true",
+                        src: ft.paperMedia.url,
+                        alt: "",
+                      })),
                 r.createElement("canvas", {
                   ref: Cl,
                   className: "drawing-canvas",
@@ -26602,6 +26653,12 @@ function cg() {
                         : "Expandir",
               onClick: () => {
                 index === 0 && toggleTrack(key);
+              },
+              onDoubleClick: (event) => {
+                if (index === 0 && key === "anim") {
+                  event.preventDefault();
+                  ln(false);
+                }
               },
             },
             index === 0 &&
@@ -28518,6 +28575,21 @@ r.createElement(
                                     }),
                                   ),
                                   r.createElement(
+                                    "label",
+                                    { className: "theme-font" },
+                                    r.createElement("span", null, Me === "en" ? "Interface font" : Me === "es" ? "Fuente de interfaz" : "Fonte da interface"),
+                                    r.createElement(
+                                      "select",
+                                      {
+                                        value: ft.fontUi || "Manrope",
+                                        onChange: (event) => patch({ fontUi: event.target.value }),
+                                      },
+                                      [...new Set([...FRAMIA_FONT_BASE, ...framiaInstalledFonts()])].map((font) =>
+                                        r.createElement("option", { key: font, value: font }, font),
+                                      ),
+                                    ),
+                                  ),
+                                  r.createElement(
                                     "div",
                                     { className: "theme-weight" },
                                     r.createElement(
@@ -30242,20 +30314,30 @@ function FramiaLibrary(props) {
     { id: "elements", pt: "Elementos", en: "Elements", es: "Elementos", icon: "M12 3l9 6-9 6-9-6z" },
     { id: "text", pt: "Texto", en: "Text", es: "Texto", icon: "M5 6h14M12 6v13M9 19h6" },
     { id: "audio", pt: "Áudio", en: "Audio", es: "Audio", icon: "M11 5v14l8-7z" },
+    { id: "video", pt: "Vídeo", en: "Video", es: "Video", icon: "M4 6h12v12H4zM16 10l4-3v10l-4-3z" },
     { id: "layers", pt: "Camadas", en: "Layers", es: "Capas", icon: "M12 4l8 4-8 4-8-4zM4 12l8 4 8-4" },
   ];
   const active = tabs.find((tab) => tab.id === p.tab) || tabs[0];
   const media = p.media || [];
   const query = (p.query || "").toLowerCase();
   const filtered = media.filter((item) =>
-    !query || String(item.name || "").toLowerCase().includes(query),
+    item.kind !== "video" &&
+    (!query || String(item.name || "").toLowerCase().includes(query)),
   );
-  const savedAll = p.saved || [];
+  const projectVideos = media.filter((item) =>
+    item.kind === "video" &&
+    (!query || String(item.name || "").toLowerCase().includes(query)),
+  );
+  const savedRaw = p.saved || [];
+  const savedAll = savedRaw.filter((item) =>
+    p.tab === "audio"
+      ? item.kind === "audio"
+      : p.tab === "video"
+        ? item.kind === "video"
+        : item.kind !== "audio" && item.kind !== "video",
+  );
   const folders = p.folders || [];
   const activeFolder = p.activeFolder || null;
-  const savedItems = savedAll.filter((item) =>
-    activeFolder ? item.folderId === activeFolder : true,
-  );
   const libIcon = (d, size) =>
     r.createElement(
       "svg",
@@ -30314,7 +30396,9 @@ function FramiaLibrary(props) {
                 },
                 item.kind === "audio"
                   ? r.createElement("i", { className: "lib-audio-badge" }, "♪")
-                  : r.createElement("img", { src: item.url, alt: "" }),
+                  : item.kind === "video"
+                    ? r.createElement("video", { src: item.url, muted: true, preload: "metadata", playsInline: true })
+                    : r.createElement("img", { src: item.url, alt: "" }),
                 r.createElement("span", null, item.name),
               ),
               r.createElement(
@@ -30361,9 +30445,9 @@ function FramiaLibrary(props) {
           "div",
           { className: "lib-empty" },
           label(
-            "Pasta vazia. Arraste um desenho salvo para aqui.",
-            "Empty folder. Drag a saved drawing in here.",
-            "Carpeta vacía. Arrastra un dibujo aquí.",
+            "Pasta vazia. Arraste um item salvo para aqui.",
+            "Empty folder. Drag a saved item here.",
+            "Carpeta vacía. Arrastra un elemento aquí.",
           ),
         );
   const shapes = FRAMIA_SHAPES.filter(
@@ -30449,12 +30533,12 @@ function FramiaLibrary(props) {
           ),
         ),
       ),
-      (p.tab === "media" || p.tab === "audio") &&
+      (p.tab === "media" || p.tab === "audio" || p.tab === "video") &&
         r.createElement(
           "button",
           {
             className: "lib-upload",
-            onClick: () => p.onUpload(p.tab === "audio" ? "audio" : "image"),
+            onClick: () => p.onUpload(p.tab === "audio" ? "audio" : p.tab === "video" ? "video" : "image"),
           },
           r.createElement(
             "svg",
@@ -30481,7 +30565,7 @@ function FramiaLibrary(props) {
       r.createElement(
         "div",
         { className: "lib-scroll" },
-        p.tab === "media" &&
+        (p.tab === "media" || p.tab === "audio" || p.tab === "video") &&
           r.createElement(
             "div",
             { className: "lib-saved" },
@@ -30491,9 +30575,13 @@ function FramiaLibrary(props) {
               r.createElement(
                 "span",
                 null,
-                label("Biblioteca", "Library", "Biblioteca"),
+                p.tab === "audio"
+                  ? label("Biblioteca de áudio", "Audio library", "Biblioteca de audio")
+                  : p.tab === "video"
+                    ? label("Biblioteca de vídeo", "Video library", "Biblioteca de video")
+                    : label("Desenhos salvos", "Saved artwork", "Dibujos guardados"),
               ),
-              r.createElement(
+              p.tab === "media" && r.createElement(
                 "button",
                 {
                   className: "text-link",
@@ -30755,52 +30843,6 @@ function FramiaLibrary(props) {
             ),
           ),
         p.tab === "audio" &&
-          savedAll.filter((item) => item.kind === "audio").length > 0 &&
-          r.createElement(
-            r.Fragment,
-            null,
-            r.createElement(
-              "div",
-              { className: "section-heading lib-project-head" },
-              r.createElement(
-                "span",
-                null,
-                label("Salvos na biblioteca", "Saved in library", "Guardados"),
-              ),
-            ),
-            savedAll
-              .filter((item) => item.kind === "audio")
-              .map((item) =>
-                r.createElement(
-                  "div",
-                  { key: item.id, className: "lib-audio-row" },
-                  r.createElement(
-                    "button",
-                    {
-                      className: "lib-font",
-                      onClick: () => p.onInsertSaved(item),
-                    },
-                    r.createElement("span", null, item.name),
-                    r.createElement(
-                      "small",
-                      null,
-                      label("inserir", "insert", "insertar"),
-                    ),
-                  ),
-                  r.createElement(
-                    "button",
-                    {
-                      type: "button",
-                      className: "lib-audio-save",
-                      title: label("Remover", "Remove", "Quitar"),
-                      onClick: () => p.onDeleteSaved(item.id),
-                    },
-                    "\u00d7",
-                  ),
-                ),
-              ),
-          ),
-        p.tab === "audio" &&
           ((p.clips || []).filter((clip) => clip.type === "audio").length
             ? (p.clips || [])
                 .filter((clip) => clip.type === "audio")
@@ -30846,6 +30888,32 @@ function FramiaLibrary(props) {
                   "Ning\u00fan audio importado.",
                 ),
               )),
+        p.tab === "video" &&
+          r.createElement(
+            r.Fragment,
+            null,
+            r.createElement("div", { className: "section-heading lib-project-head" },
+              r.createElement("span", null, label("Neste projeto", "In this project", "En este proyecto")),
+              r.createElement("small", null, `${projectVideos.length} ${label("vídeos", "videos", "videos")}`),
+            ),
+            projectVideos.length
+              ? projectVideos.map((item) => {
+                  const clip = (p.clips || []).find((candidate) => candidate.id === item.id);
+                  return r.createElement("div", { key: item.id, className: "lib-video-row" },
+                    r.createElement("button", { className: "lib-video-card", onClick: () => p.onSelectClip(item.id) },
+                      r.createElement("video", { src: item.url, muted: true, preload: "metadata", playsInline: true }),
+                      r.createElement("span", null, item.name),
+                    ),
+                    r.createElement("button", {
+                      type: "button",
+                      className: "lib-video-save",
+                      title: label("Salvar vídeo na biblioteca", "Save video to library", "Guardar video en la biblioteca"),
+                      onClick: () => clip && p.onSaveVideo && p.onSaveVideo(clip),
+                    }, libIcon("M12 5v14M5 12h14", 12)),
+                  );
+                })
+              : r.createElement("div", { className: "lib-empty" }, label("Nenhum vídeo importado.", "No video imported yet.", "Ningún video importado.")),
+          ),
         p.tab === "layers" && p.layersNode,
       ),
     ),

@@ -266,6 +266,21 @@ async function api(request, env, signedIn) {
         }
       }
     }
+    if (path[1] === 'library' && path[2] === 'media' && path.length === 4) {
+      const itemId = String(path[3] || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+      if (!itemId) return error('Invalid media id', 400);
+      const key = `library/${encodeURIComponent(user.sub)}/${itemId}`;
+      if (request.method === 'PUT') {
+        if (!isSameOriginRequest(request)) return error('Forbidden', 403);
+        if ((Number(request.headers.get('content-length')) || 0) > 25_000_000) return error('Media too large', 413);
+        await env.FILES.put(key, request.body, { httpMetadata: { contentType: request.headers.get('content-type') || 'application/octet-stream' } });
+        return json({ ok: true });
+      }
+      if (request.method === 'GET') {
+        const object = await env.FILES.get(key);
+        return object ? new Response(object.body, { headers: { ...privateHeaders, 'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream' } }) : error('Media not found', 404);
+      }
+    }
     if (path[1] === 'library' && path.length === 2) {
       if (request.method === 'GET') {
         const row = await env.DB.prepare('SELECT body FROM framia_library_v2 WHERE owner=?').bind(user.sub).first();
@@ -290,7 +305,7 @@ async function api(request, env, signedIn) {
           .map((item) => ({
             id: String(item.id).slice(0, 64),
             name: String(item.name || 'Item').slice(0, 80),
-            kind: item.kind === 'audio' ? 'audio' : 'image',
+            kind: item.kind === 'audio' ? 'audio' : item.kind === 'video' ? 'video' : 'image',
             url: item.url,
             folderId: item.folderId ? String(item.folderId).slice(0, 64) : null,
             createdAt: Number(item.createdAt) || Date.now(),
