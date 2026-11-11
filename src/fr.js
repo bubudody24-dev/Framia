@@ -17931,6 +17931,32 @@ function Ip(o, d = "Duo Studio") {
     }
   );
 }
+function framiaCropFilled(data, width, height) {
+  let minX = width,
+    minY = height,
+    maxX = -1,
+    maxY = -1;
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      if (data[(row + x) * 4 + 3] === 0) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < 0 || maxY < 0) return null;
+  const w = maxX - minX + 1,
+    h = maxY - minY + 1,
+    canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const paint = canvas.getContext("2d");
+  if (!paint) return null;
+  paint.putImageData(new ImageData(data, width, height), -minX, -minY);
+  return { url: canvas.toDataURL("image/png"), x: minX, y: minY, w, h };
+}
 function Wp(o, d, v, f, g, b, N = 1) {
   const M = o.width,
     B = o.height;
@@ -17977,12 +18003,7 @@ function Wp(o, d, v, f, g, b, N = 1) {
         const out = new Uint8ClampedArray(size);
         (out.set(new Uint8Array(framiaFillWasm.memory.buffer, ptr, size)),
           framiaFillWasm.dealloc(ptr, size));
-        const outCanvas = document.createElement("canvas");
-        ((outCanvas.width = M), (outCanvas.height = B));
-        outCanvas
-          .getContext("2d")
-          .putImageData(new ImageData(out, M, B), 0, 0);
-        return outCanvas.toDataURL("image/png");
+        return framiaCropFilled(out, M, B);
       }
       framiaFillWasm.dealloc(ptr, size);
       return null;
@@ -18094,13 +18115,7 @@ function Wp(o, d, v, f, g, b, N = 1) {
     }
     frontier = next;
   }
-  const F = document.createElement("canvas");
-  return (
-    (F.width = M),
-    (F.height = B),
-    F.getContext("2d").putImageData(W, 0, 0),
-    F.toDataURL("image/png")
-  );
+  return framiaCropFilled(V, M, B);
 }
 const Ci = new Map();
 function Pp(o, d) {
@@ -20406,11 +20421,11 @@ function cg() {
             {
               id: Ke(),
               type: "image",
-              src: y,
-              x: 0,
-              y: 0,
-              w: z.width,
-              h: z.height,
+              src: y.url,
+              x: y.x,
+              y: y.y,
+              w: y.w,
+              h: y.h,
               opacity: 1,
             },
           ]);
