@@ -20206,7 +20206,11 @@ function cg() {
         const list = (z.content?.[ze.id]?.[ee]) || [],
           hit = [...list]
             .reverse()
-            .find((candidate) => candidate.type === "extrude" && Vp(candidate, s, 12));
+            .find(
+              (candidate) =>
+                candidate.type === "extrude" &&
+                (Vp(candidate, s, 12) || framiaExtrudeCover(candidate, s, 10)),
+            );
         if (hit) {
           Wt.current = {
             type: "turn3d",
@@ -20254,7 +20258,13 @@ function cg() {
         const tol3d = 14,
           hit3d =
             !i.shiftKey &&
-            [...mt].reverse().find((R) => R.type === "extrude" && Vp(R, s, tol3d));
+            [...mt]
+              .reverse()
+              .find(
+                (R) =>
+                  R.type === "extrude" &&
+                  (Vp(R, s, tol3d) || framiaExtrudeCover(R, s, 12)),
+              );
         if (hit3d) {
           (tn([hit3d.id]),
             B({ ids: [hit3d.id], box: jc([hit3d]), frameId: ze.id, layerId: ee }),
@@ -29451,26 +29461,133 @@ function framiaShadeColor(hex, amount) {
   );
   return `rgb(${out[0]},${out[1]},${out[2]})`;
 }
-function framiaDrawExtrudeSource(ctx, el) {
+const FRAMIA_SOURCE_TEX = new WeakMap();
+function framiaSourceTexture(el) {
   const src = el.source;
-  if (!src) return;
-  const depth = Math.max(1, el.depth || 60);
-  const rx = ((el.rx || 0) * Math.PI) / 180,
-    ry = ((el.ry || 0) * Math.PI) / 180;
-  const dx = Math.sin(ry),
-    dy = -Math.sin(rx) * Math.cos(ry);
-  const steps = Math.max(6, Math.min(30, Math.round(depth / 3)));
-  for (let i = steps; i >= 1; i--) {
-    const t = i / steps;
+  if (!src || typeof src !== "object") return null;
+  const cached = FRAMIA_SOURCE_TEX.get(src);
+  if (cached) return cached;
+  const box = jc([src]);
+  if (!box || !(box.w > 0) || !(box.h > 0)) return null;
+  const scale = Math.min(2, 1600 / Math.max(box.w, box.h)),
+    canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(box.w * scale));
+  canvas.height = Math.max(1, Math.round(box.h * scale));
+  const paint = canvas.getContext("2d");
+  if (!paint) return null;
+  paint.scale(scale, scale);
+  paint.translate(-box.x, -box.y);
+  try {
+    Eu(paint, src);
+  } catch {
+    return null;
+  }
+  const entry = { canvas };
+  FRAMIA_SOURCE_TEX.set(src, entry);
+  return entry;
+}
+/* Textured quad: two triangles, each mapped with its own affine matrix. */
+function framiaDrawQuadTexture(ctx, tex, quad, texQuad) {
+  for (const [a, b, c] of [[0, 1, 2], [0, 2, 3]]) {
+    const A = quad[a],
+      B = quad[b],
+      C = quad[c],
+      sa = texQuad[a],
+      sb = texQuad[b],
+      sc = texQuad[c];
+    const u1x = sb.x - sa.x,
+      u1y = sb.y - sa.y,
+      v1x = sc.x - sa.x,
+      v1y = sc.y - sa.y,
+      det = u1x * v1y - u1y * v1x;
+    if (!det) return;
+    const U1x = B.x - A.x,
+      U1y = B.y - A.y,
+      V1x = C.x - A.x,
+      V1y = C.y - A.y;
+    const a11 = (U1x * v1y - V1x * u1y) / det,
+      a21 = (V1x * u1x - U1x * v1x) / det,
+      a12 = (U1y * v1y - V1y * u1y) / det,
+      a22 = (V1y * u1x - U1y * v1x) / det;
     ctx.save();
-    ctx.translate(dx * depth * t, dy * depth * t);
-    ctx.filter = `brightness(${0.38 + 0.42 * (1 - t)})`;
-    Eu(ctx, src);
+    ctx.beginPath();
+    (ctx.moveTo(A.x, A.y), ctx.lineTo(B.x, B.y), ctx.lineTo(C.x, C.y), ctx.closePath());
+    ctx.clip();
+    ctx.transform(
+      a11,
+      a12,
+      a21,
+      a22,
+      A.x - a11 * sa.x - a21 * sa.y,
+      A.y - a12 * sa.x - a22 * sa.y,
+    );
+    ctx.drawImage(tex, 0, 0);
     ctx.restore();
   }
+}
+/* Extruded artwork: the picture is mapped onto a real box, so a full spin
+   keeps reading as a solid volume instead of sliding copies. */
+/* Generous grab area for 3D objects: the whole projected body counts. */
+function framiaNormAngle(value) {
+  const n = Number(value) || 0;
+  return Math.round((((n % 360) + 540) % 360) - 180);
+}
+function framiaExtrudeCover(el, pt, pad) {
+  const geo = framiaExtrudeGeometry(el);
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const p of geo.points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const grow = pad || 0;
+  return (
+    pt.x >= minX - grow &&
+    pt.x <= maxX + grow &&
+    pt.y >= minY - grow &&
+    pt.y <= maxY + grow
+  );
+}
+function framiaDrawExtrudeSource(ctx, el) {
+  const tex = framiaSourceTexture(el);
+  if (!tex) return;
+  const geo = framiaExtrudeGeometry(el),
+    base = el.color || "#8b6df0",
+    tw = tex.canvas.width,
+    th = tex.canvas.height,
+    texCorners = [
+      { x: 0, y: 0 },
+      { x: tw, y: 0 },
+      { x: tw, y: th },
+      { x: 0, y: th },
+    ];
   ctx.save();
-  ctx.filter = "none";
-  Eu(ctx, src);
+  ctx.lineJoin = "round";
+  for (const face of geo.faces) {
+    const cap = face.front || face.idx[0] === 5;
+    if (cap) {
+      ctx.save();
+      ctx.filter = `brightness(${face.shade})`;
+      framiaDrawQuadTexture(
+        ctx,
+        tex.canvas,
+        face.idx.map((i) => geo.points[i]),
+        face.idx.map((i) => texCorners[i % 4]),
+      );
+      ctx.restore();
+      continue;
+    }
+    const fill = framiaShadeColor(base, face.shade);
+    ctx.beginPath();
+    face.pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
   ctx.restore();
 }
 function framiaDrawExtrude(ctx, el) {
@@ -30351,10 +30468,10 @@ function FramiaTransformPanel(props) {
               type: "range",
               min: "-180",
               max: "180",
-              value: Math.round(p.extrude.rx || 0),
+              value: framiaNormAngle(p.extrude.rx),
               onChange: (event) => p.onChange({ rx: +event.target.value }),
             }),
-            r.createElement("b", null, Math.round(p.extrude.rx || 0), "°"),
+            r.createElement("b", null, framiaNormAngle(p.extrude.rx), "°"),
           ),
         ),
         r.createElement(
@@ -30368,10 +30485,10 @@ function FramiaTransformPanel(props) {
               type: "range",
               min: "-180",
               max: "180",
-              value: Math.round(p.extrude.ry || 0),
+              value: framiaNormAngle(p.extrude.ry),
               onChange: (event) => p.onChange({ ry: +event.target.value }),
             }),
-            r.createElement("b", null, Math.round(p.extrude.ry || 0), "°"),
+            r.createElement("b", null, framiaNormAngle(p.extrude.ry), "°"),
           ),
         ),
         r.createElement(

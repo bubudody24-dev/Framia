@@ -2,6 +2,78 @@
    Everything here is theme aware: colours come from the --c-* tokens the
    theme engine writes on :root, so every theme stays consistent.          */
 
+/* Site font: Touche (bundled in /fonts/touche, OFL-style befonts license) */
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-Light.otf") format("opentype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-LightItalic.otf") format("opentype");
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-RegularItalic.otf") format("opentype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-MediumItalic.otf") format("opentype");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-Semibold.otf") format("opentype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-SemiboldItalic.otf") format("opentype");
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Touche";
+  src: url("/fonts/touche/Touche-BoldItalic.otf") format("opentype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
   --ui-radius: 12px;
   --ui-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -829,7 +901,7 @@ body::-webkit-scrollbar-track,
   font-display: swap;
 }
 :root {
-  --font-ui: Outfit, Manrope, system-ui, sans-serif;
+  --font-ui: "Touche", Outfit, Manrope, system-ui, sans-serif;
   --fw-light: 300;
   --fw-regular: 450;
   --fw-medium: 600;
