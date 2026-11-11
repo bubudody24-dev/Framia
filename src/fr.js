@@ -20287,16 +20287,7 @@ function cg() {
             rt({}),
             wu(!0),
             ve("properties"),
-            (Wt.current = {
-              type: "turn3d",
-              start: s,
-              id: hit3d.id,
-              rx: hit3d.rx || 0,
-              ry: hit3d.ry || 0,
-              orig: { rx: hit3d.rx || 0, ry: hit3d.ry || 0 },
-              frameId: ze.id,
-              layerId: ee,
-            }));
+            (Wt.current = { type: "move", start: s, base: {} }));
           return;
         }
         const tol = (() => {
@@ -23366,7 +23357,7 @@ function cg() {
         }),
         ia(extrude.id),
         Ea.current.clear(),
-        He("Objeto 3D criado", "Arraste com Transformar (T) para girar"));
+        He("Objeto 3D criado", "Transformar move · T duas vezes gira"));
     },
     resetSelection = () => {
       if (!M || !M.ids.length || !ze) return;
@@ -29885,6 +29876,116 @@ function FramiaLibrary(props) {
   const savedItems = savedAll.filter((item) =>
     activeFolder ? item.folderId === activeFolder : true,
   );
+  const libIcon = (d, size) =>
+    r.createElement(
+      "svg",
+      {
+        viewBox: "0 0 24 24",
+        width: size || 13,
+        height: size || 13,
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: "2",
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+      },
+      r.createElement("path", { d }),
+    );
+  const libCaret = (open) =>
+    r.createElement(
+      "svg",
+      {
+        viewBox: "0 0 24 24",
+        width: 13,
+        height: 13,
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: "2.2",
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        className: open ? "lib-caret open" : "lib-caret",
+      },
+      r.createElement("path", { d: "M9 6l6 6-6 6" }),
+    );
+  const savedGrid = (items) =>
+    items.length
+      ? r.createElement(
+          "div",
+          { className: "lib-grid" },
+          items.map((item) =>
+            r.createElement(
+              "div",
+              {
+                key: item.id,
+                className: "lib-saved-item",
+                draggable: true,
+                onDragStart: (event) => {
+                  event.dataTransfer.setData("text/framia-item", item.id);
+                  event.dataTransfer.effectAllowed = "move";
+                },
+              },
+              r.createElement(
+                "button",
+                {
+                  type: "button",
+                  className: "lib-item",
+                  title: item.name,
+                  onClick: () => p.onInsertSaved(item),
+                },
+                item.kind === "audio"
+                  ? r.createElement("i", { className: "lib-audio-badge" }, "♪")
+                  : r.createElement("img", { src: item.url, alt: "" }),
+                r.createElement("span", null, item.name),
+              ),
+              r.createElement(
+                "button",
+                {
+                  type: "button",
+                  className: "lib-item-x",
+                  title: label("Remover", "Remove", "Quitar"),
+                  onClick: () => p.onDeleteSaved(item.id),
+                },
+                libIcon("M6 6l12 12M18 6L6 18", 11),
+              ),
+              folders.length > 0 &&
+                r.createElement(
+                  "select",
+                  {
+                    className: "lib-item-folder",
+                    value: item.folderId || "",
+                    title: label(
+                      "Mover para pasta",
+                      "Move to folder",
+                      "Mover a carpeta",
+                    ),
+                    onChange: (event) =>
+                      p.onMoveSaved(item.id, event.target.value || null),
+                  },
+                  r.createElement(
+                    "option",
+                    { value: "" },
+                    label("Sem pasta", "No folder", "Sin carpeta"),
+                  ),
+                  folders.map((folder) =>
+                    r.createElement(
+                      "option",
+                      { key: folder.id, value: folder.id },
+                      folder.name,
+                    ),
+                  ),
+                ),
+            ),
+          ),
+        )
+      : r.createElement(
+          "div",
+          { className: "lib-empty" },
+          label(
+            "Pasta vazia. Arraste um desenho salvo para aqui.",
+            "Empty folder. Drag a saved drawing in here.",
+            "Carpeta vacía. Arrastra un dibujo aquí.",
+          ),
+        );
   const shapes = FRAMIA_SHAPES.filter(
     (shape) =>
       !query ||
@@ -30025,122 +30126,133 @@ function FramiaLibrary(props) {
                 },
                 label("＋ Salvar desenho", "＋ Save drawing", "＋ Guardar dibujo"),
               ),
-            ),
-            r.createElement(
-              "div",
-              { className: "lib-folders" },
               r.createElement(
                 "button",
                 {
-                  type: "button",
-                  className: activeFolder ? "lib-folder" : "lib-folder selected",
-                  onClick: () => p.onPickFolder(null),
+                  className: "lib-new-folder",
+                  onClick: p.onNewFolder,
+                  title: label("Nova pasta", "New folder", "Nueva carpeta"),
                 },
-                label("Tudo", "All", "Todo"),
-              ),
-              folders.map((folder) =>
-                r.createElement(
-                  "span",
-                  { key: folder.id, className: "lib-folder-wrap" },
-                  r.createElement(
-                    "button",
-                    {
-                      type: "button",
-                      className:
-                        activeFolder === folder.id
-                          ? "lib-folder selected"
-                          : "lib-folder",
-                      onClick: () =>
-                        p.onPickFolder(
-                          activeFolder === folder.id ? null : folder.id,
-                        ),
-                    },
-                    folder.name,
-                  ),
-                  r.createElement(
-                    "button",
-                    {
-                      type: "button",
-                      className: "lib-folder-x",
-                      title: label("Remover pasta", "Delete folder", "Eliminar carpeta"),
-                      onClick: () => p.onDeleteFolder(folder.id),
-                    },
-                    "×",
-                  ),
-                ),
-              ),
-              r.createElement(
-                "button",
-                { type: "button", className: "lib-folder add", onClick: p.onNewFolder },
-                label("＋ Pasta", "＋ Folder", "＋ Carpeta"),
+                libIcon("M12 5v14M5 12h14"),
+                label("Pasta", "Folder", "Carpeta"),
               ),
             ),
-            savedItems.length
-              ? r.createElement(
+            r.createElement(
+              "div",
+              { className: "lib-groups" },
+              folders.map((folder) => {
+                const inside = savedAll.filter(
+                  (item) => item.folderId === folder.id,
+                );
+                const open = activeFolder === folder.id;
+                return r.createElement(
                   "div",
-                  { className: "lib-grid" },
-                  savedItems.map((item) =>
+                  { key: folder.id, className: open ? "lib-group open" : "lib-group" },
+                  r.createElement(
+                    "div",
+                    {
+                      className: "lib-group-head",
+                      role: "button",
+                      tabIndex: 0,
+                      title: label(
+                        "Mostrar o conteúdo da pasta",
+                        "Show folder contents",
+                        "Mostrar el contenido",
+                      ),
+                      onClick: () => p.onPickFolder(open ? null : folder.id),
+                      onKeyDown: (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        p.onPickFolder(open ? null : folder.id);
+                      },
+                      onDragOver: (event) => {
+                        event.preventDefault();
+                        event.currentTarget.classList.add("drop");
+                      },
+                      onDragLeave: (event) =>
+                        event.currentTarget.classList.remove("drop"),
+                      onDrop: (event) => {
+                        event.preventDefault();
+                        event.currentTarget.classList.remove("drop");
+                        const moved = event.dataTransfer.getData(
+                          "text/framia-item",
+                        );
+                        moved && p.onMoveSaved(moved, folder.id);
+                      },
+                    },
+                    libCaret(open),
+                    r.createElement("b", null, folder.name),
+                    r.createElement("span", { className: "lib-group-count" }, inside.length),
+                    r.createElement("span", { className: "lib-group-spacer" }),
                     r.createElement(
-                      "div",
-                      { key: item.id, className: "lib-saved-item" },
-                      r.createElement(
-                        "button",
-                        {
-                          type: "button",
-                          className: "lib-item",
-                          title: item.name,
-                          onClick: () => p.onInsertSaved(item),
-                        },
-                        item.kind === "audio"
-                          ? r.createElement("i", { className: "lib-audio-badge" }, "♪")
-                          : r.createElement("img", { src: item.url, alt: "" }),
-                        r.createElement("span", null, item.name),
-                      ),
-                      r.createElement(
-                        "button",
-                        {
-                          type: "button",
-                          className: "lib-item-x",
-                          title: label("Remover", "Remove", "Quitar"),
-                          onClick: () => p.onDeleteSaved(item.id),
-                        },
-                        "×",
-                      ),
-                      folders.length > 0 &&
-                        r.createElement(
-                          "select",
-                          {
-                            className: "lib-item-folder",
-                            value: item.folderId || "",
-                            title: label("Mover para pasta", "Move to folder", "Mover a carpeta"),
-                            onChange: (event) =>
-                              p.onMoveSaved(item.id, event.target.value || null),
-                          },
-                          r.createElement(
-                            "option",
-                            { value: "" },
-                            label("Sem pasta", "No folder", "Sin carpeta"),
-                          ),
-                          folders.map((folder) =>
-                            r.createElement(
-                              "option",
-                              { key: folder.id, value: folder.id },
-                              folder.name,
-                            ),
-                          ),
+                      "span",
+                      {
+                        className: "lib-group-x",
+                        role: "button",
+                        tabIndex: 0,
+                        title: label(
+                          "Remover pasta",
+                          "Delete folder",
+                          "Eliminar carpeta",
                         ),
+                        onClick: (event) => {
+                          event.stopPropagation();
+                          p.onDeleteFolder(folder.id);
+                        },
+                      },
+                      libIcon("M6 6l12 12M18 6L6 18", 11),
                     ),
                   ),
-                )
-              : r.createElement(
-                  "div",
-                  { className: "lib-empty" },
-                  label(
-                    "Nada salvo ainda. Desenhe, selecione e clique em Salvar desenho.",
-                    "Nothing saved yet. Draw, select and hit Save drawing.",
-                    "Nada guardado todavía. Dibuja, selecciona y pulsa Guardar dibujo.",
-                  ),
-                ),
+                  open && savedGrid(inside),
+                );
+              }),
+              (() => {
+                const loose = savedAll.filter((item) => !item.folderId);
+                const open = activeFolder === null;
+                return loose.length
+                  ? r.createElement(
+                      "div",
+                      { className: open ? "lib-group open" : "lib-group" },
+                      r.createElement(
+                        "div",
+                        {
+                          className: "lib-group-head",
+                          role: "button",
+                          tabIndex: 0,
+                          onClick: () => p.onPickFolder(null),
+                          onDragOver: (event) => {
+                            event.preventDefault();
+                            event.currentTarget.classList.add("drop");
+                          },
+                          onDragLeave: (event) =>
+                            event.currentTarget.classList.remove("drop"),
+                          onDrop: (event) => {
+                            event.preventDefault();
+                            event.currentTarget.classList.remove("drop");
+                            const moved = event.dataTransfer.getData(
+                              "text/framia-item",
+                            );
+                            moved && p.onMoveSaved(moved, null);
+                          },
+                        },
+                        libCaret(open),
+                        r.createElement(
+                          "b",
+                          null,
+                          label("Sem pasta", "No folder", "Sin carpeta"),
+                        ),
+                        r.createElement(
+                          "span",
+                          { className: "lib-group-count" },
+                          loose.length,
+                        ),
+                        r.createElement("span", { className: "lib-group-spacer" }),
+                      ),
+                      open && savedGrid(loose),
+                    )
+                  : null;
+              })(),
+            ),
           ),
         p.tab === "media" &&
           r.createElement(
@@ -30154,11 +30266,7 @@ function FramiaLibrary(props) {
             r.createElement(
               "small",
               null,
-              label(
-                "não salvo na biblioteca",
-                "not saved to the library",
-                "no guardado en la biblioteca",
-              ),
+              `${filtered.length} ${label("arquivos", "files", "archivos")}`,
             ),
           ),
         p.tab === "media" &&
