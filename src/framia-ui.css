@@ -2558,6 +2558,9 @@ summary:active {
 .track-caret {
   flex: none;
 }
+.track-name > span.track-label-text {
+  font-variant-numeric: tabular-nums;
+}
 .track-label-text {
   flex: 1 1 auto;
   min-width: 0;
@@ -2573,7 +2576,11 @@ summary:active {
 @media (max-width: 760px) {
   .timeline-label,
   .track-labels {
-    width: 96px;
+    width: 104px;
+  }
+  .track-name {
+    gap: 4px;
+    padding: 0 8px;
   }
 }
 

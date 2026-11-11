@@ -26623,7 +26623,7 @@ function cg() {
             r.createElement(
               "span",
               { className: "track-label-text" },
-              index === 0 ? name : `${name} ${index + 1}`,
+              index === 0 ? name : index + 1,
             ),
             index === 0 &&
               count > 0 &&
