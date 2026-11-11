@@ -812,6 +812,28 @@ async function seekExportVideo(video, time) {
     video.currentTime = time;
   });
 }
+function framiaClipVisual(clip, seconds) {
+  const fx = clip?.effects || {};
+  const brightness = Number.isFinite(+fx.brightness) ? +fx.brightness : 100;
+  const contrast = Number.isFinite(+fx.contrast) ? +fx.contrast : 100;
+  const saturation = Number.isFinite(+fx.saturation) ? +fx.saturation : 100;
+  const blur = Math.max(0, Number(fx.blur) || 0);
+  const hue = Number(fx.hue) || 0;
+  const sepia = Math.max(0, Math.min(100, Number(fx.sepia) || 0));
+  const grayscale = Math.max(0, Math.min(100, Number(fx.grayscale) || 0));
+  let alpha = Math.max(0, Math.min(1, Number.isFinite(+fx.opacity) ? +fx.opacity / 100 : 1));
+  const local = Math.max(0, seconds - (clip.start || 0));
+  const remaining = Math.max(0, (clip.duration || 0) - local);
+  const transition = Math.max(0.05, Math.min(Number(clip.transitionDuration) || 0.4, (clip.duration || 1) / 2));
+  if (clip.transitionIn === "fade") alpha *= Math.min(1, local / transition);
+  if (clip.transitionOut === "fade") alpha *= Math.min(1, remaining / transition);
+  const scale = clip.transitionIn === "zoom" ? 1.08 - 0.08 * Math.min(1, local / transition) : 1;
+  return {
+    alpha,
+    scale,
+    filter: `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) blur(${blur}px) hue-rotate(${hue}deg) sepia(${sepia}%) grayscale(${grayscale}%)`,
+  };
+}
 async function tp(o, d, v, f, g, b, options = {}) {
   const N = document.createElement("canvas");
   ((N.width = o.width), (N.height = o.height));
@@ -873,13 +895,20 @@ async function tp(o, d, v, f, g, b, options = {}) {
         );
         const width = video.videoWidth * scale;
         const height = video.videoHeight * scale;
+        const visual = framiaClipVisual(activeVideo.clip, te / j),
+          drawWidth = width * visual.scale,
+          drawHeight = height * visual.scale;
+        M.save();
+        M.globalAlpha = visual.alpha;
+        M.filter = visual.filter;
         M.drawImage(
           video,
-          (N.width - width) / 2,
-          (N.height - height) / 2,
-          width,
-          height,
+          (N.width - drawWidth) / 2,
+          (N.height - drawHeight) / 2,
+          drawWidth,
+          drawHeight,
         );
+        M.restore();
       }
       const P = o.frames[gm(o.frames, te / j, j)];
       if (P) {
@@ -19779,7 +19808,7 @@ function cg() {
     }, [z, Oa]),
     Y.useEffect(() => {
       if (!splash) return;
-      const timer = setTimeout(() => setSplash(!1), 3680);
+      const timer = setTimeout(() => setSplash(!1), 1600);
       return () => clearTimeout(timer);
     }, [splash]),
     Y.useEffect(() => {
@@ -19962,8 +19991,15 @@ function cg() {
       if (y && y.readyState >= 2) {
         let X = Math.min(i.width / y.videoWidth, i.height / y.videoHeight),
           $ = y.videoWidth * X,
-          se = y.videoHeight * X;
-        s.drawImage(y, (i.width - $) / 2, (i.height - se) / 2, $, se);
+          se = y.videoHeight * X,
+          visual = framiaClipVisual(h, K),
+          dw = $ * visual.scale,
+          dh = se * visual.scale;
+        s.save();
+        s.globalAlpha = visual.alpha;
+        s.filter = visual.filter;
+        s.drawImage(y, (i.width - dw) / 2, (i.height - dh) / 2, dw, dh);
+        s.restore();
       }
       let R = () => {
         (Ea.current.clear(), o.current.clear(), te((X) => ({ ...X })));
@@ -21745,11 +21781,17 @@ function cg() {
     },
     addLaneTrack = (key) => {
       if (key === "anim") return;
+      const fallback = `${key === "audio" ? "Áudio" : "Vídeo"} ${(Number((z.lanes || {})[key]) || 1) + 1}`;
+      const name = window.prompt(
+        Me === "en" ? "Category name" : Me === "es" ? "Nombre de la categoría" : "Nome da categoria",
+        fallback,
+      );
+      if (!name || !name.trim()) return;
       De((next) => {
-        next.lanes = {
-          ...(next.lanes || {}),
-          [key]: (Number((next.lanes || {})[key]) || 1) + 1,
-        };
+        const count = (Number((next.lanes || {})[key]) || 1) + 1;
+        next.lanes = { ...(next.lanes || {}), [key]: count };
+        next.laneNames = { ...(next.laneNames || {}) };
+        next.laneNames[key] = [...(next.laneNames[key] || []), name.trim().slice(0, 40)];
       });
     },
     moveClipTrack = (delta) => {
@@ -21903,7 +21945,7 @@ function cg() {
       }),
         (h.src = s));
     },
-    $c = (i, s) => {
+    $c = (i, s, options = {}) => {
       var se;
       if (!i) return;
       const h = Ke(),
@@ -21938,7 +21980,7 @@ function cg() {
           sourceDuration: Math.max(0.1, R),
         };
         (De((et) => et.clips.push(be)), ta(be.id), He(H.import, i.name));
-        if (s === "audio") libSaveClip(be, i);
+        if (s === "audio" && !options.fromLibrary) libSaveClip(be, i);
       }
     },
     qu = () => {
@@ -23792,7 +23834,7 @@ function cg() {
             file = new File([blob], name, {
               type: blob.type || `${kind}/webm`,
             });
-          $c(file, kind);
+          $c(file, kind, { fromLibrary: true });
           return;
         }
         libInsertMedia(item);
@@ -24541,24 +24583,6 @@ function cg() {
                   onClick: () => Fa.current.click(),
                 },
                 r.createElement(Ni, { size: 19 }),
-              ),
-              r.createElement(
-                "button",
-                {
-                  className: "tool",
-                  title: H.shortcuts,
-                  onClick: () => Ve("shortcuts"),
-                },
-                r.createElement(zp, { size: 19 }),
-              ),
-              r.createElement(
-                "button",
-                {
-                  className: "tool",
-                  title: H.settings,
-                  onClick: () => Ve("settings"),
-                },
-                r.createElement(sm, { size: 19 }),
               ),
             ),
           ),
@@ -25756,6 +25780,7 @@ function cg() {
                         keys: selPrimary.keys || {},
                         frame: P,
                         onToggleKey: toggleEvent,
+                        onCreate: () => toggleEvent("pos"),
                         onClear: clearEvents,
                         onChange: patchSelection,
                         onReset: resetSelection,
@@ -25790,6 +25815,49 @@ function cg() {
                               : "Extruda o desenho, traço ou texto selecionado e permite girá-lo no espaço.",
                         ),
                       ),
+                    Tt && (() => {
+                      const clip = z.clips.find((item) => item.id === Tt);
+                      if (!clip || clip.type !== "video") return null;
+                      const fx = clip.effects || {};
+                      const patchClip = (patch) => De((next) => {
+                        const target = next.clips.find((item) => item.id === Tt);
+                        if (target) Object.assign(target, patch);
+                      });
+                      const patchFx = (key, value) => patchClip({ effects: { ...fx, [key]: value } });
+                      const slider = (key, label, min, max, value, suffix = "%") => r.createElement("label", { className: "effect-control" },
+                        r.createElement("span", null, label, r.createElement("b", null, value, suffix)),
+                        r.createElement("input", { type: "range", min, max, value, onChange: (event) => patchFx(key, +event.target.value) }),
+                      );
+                      return r.createElement("section", { className: "inspector-section clip-effects" },
+                        r.createElement("div", { className: "section-heading" },
+                          r.createElement("span", null, Me === "en" ? "Effects & transitions" : Me === "es" ? "Efectos y transiciones" : "Efeitos e transições"),
+                          r.createElement("button", { className: "text-link", onClick: () => patchClip({ effects: {}, transitionIn: "none", transitionOut: "none" }) }, H.reset),
+                        ),
+                        r.createElement("div", { className: "effect-presets" }, [
+                          ["Original", {}], ["Cinema", { contrast: 115, saturation: 85, brightness: 92 }],
+                          ["Vibrante", { saturation: 145, contrast: 108 }], ["P&B", { grayscale: 100, contrast: 112 }],
+                          ["Vintage", { sepia: 55, saturation: 82, contrast: 92 }], ["Suave", { brightness: 108, contrast: 90, saturation: 92, blur: 1 }],
+                          ["Quente", { hue: 9, saturation: 118, brightness: 104 }], ["Frio", { hue: -14, saturation: 108, contrast: 105 }],
+                          ["Retrô", { sepia: 34, contrast: 86, saturation: 72, brightness: 108 }], ["Drama", { contrast: 145, saturation: 74, brightness: 88 }],
+                          ["Pastel", { contrast: 78, saturation: 82, brightness: 116 }], ["Neon", { contrast: 132, saturation: 190, brightness: 105 }],
+                          ["Noir", { grayscale: 100, contrast: 155, brightness: 82 }], ["Desbotado", { contrast: 72, saturation: 62, brightness: 112 }],
+                          ["Sonho", { brightness: 112, saturation: 108, blur: 2 }], ["Crepúsculo", { hue: 24, contrast: 112, saturation: 132, brightness: 91 }],
+                          ["Esmeralda", { hue: 42, saturation: 135, contrast: 108 }], ["Magenta", { hue: -38, saturation: 142, contrast: 110 }],
+                        ].map(([name, effects]) => r.createElement("button", { key: name, onClick: () => patchClip({ effects }) }, name))),
+                        slider("brightness", H.brightness || "Brilho", 20, 200, fx.brightness ?? 100),
+                        slider("contrast", "Contraste", 20, 200, fx.contrast ?? 100),
+                        slider("saturation", "Saturação", 0, 250, fx.saturation ?? 100),
+                        slider("hue", "Matiz", -180, 180, fx.hue ?? 0, "°"),
+                        slider("blur", "Desfoque", 0, 20, fx.blur ?? 0, "px"),
+                        slider("opacity", H.opacity, 0, 100, fx.opacity ?? 100),
+                        r.createElement("div", { className: "transition-grid" },
+                          r.createElement("label", null, "Entrada", r.createElement("select", { value: clip.transitionIn || "none", onChange: (event) => patchClip({ transitionIn: event.target.value }) },
+                            r.createElement("option", { value: "none" }, "Nenhuma"), r.createElement("option", { value: "fade" }, "Fade"), r.createElement("option", { value: "zoom" }, "Zoom"))),
+                          r.createElement("label", null, "Saída", r.createElement("select", { value: clip.transitionOut || "none", onChange: (event) => patchClip({ transitionOut: event.target.value }) },
+                            r.createElement("option", { value: "none" }, "Nenhuma"), r.createElement("option", { value: "fade" }, "Fade"))),
+                        ),
+                      );
+                    })(),
                     r.createElement(
                       "section",
                       { className: "inspector-section" },
@@ -25837,7 +25905,7 @@ function cg() {
                         r.createElement(
                           "span",
                           null,
-                          lt ? H.stamp : "BRUSH 01",
+                          lt ? H.stamp : Me === "en" ? "BRUSH 01" : Me === "es" ? "PINCEL 01" : "PINCEL 01",
                         ),
                       ),
                       r.createElement(
@@ -26423,6 +26491,16 @@ function cg() {
               { className: "transport-left" },
               r.createElement(
                 "button",
+                {
+                  className: "icon-button timeline-settings",
+                  title: H.settings,
+                  "aria-label": H.settings,
+                  onClick: () => Ve("settings"),
+                },
+                r.createElement(sm, { size: 16 }),
+              ),
+              r.createElement(
+                "button",
                 { className: "icon-button", title: "Desfazer (Ctrl+Z)", onClick: Uu },
                 r.createElement(S1, { size: 16 }),
               ),
@@ -26671,7 +26749,7 @@ function cg() {
             r.createElement(
               "span",
               { className: "track-label-text" },
-              index === 0 ? name : index + 1,
+              index === 0 ? name : ((z.laneNames || {})[key]?.[index - 1] || `${name} ${index + 1}`),
             ),
             index === 0 &&
               count > 0 &&
@@ -26689,10 +26767,10 @@ function cg() {
                   className: "track-plus",
                   title:
                     Me === "en"
-                      ? "Add another track"
+                      ? "Create category"
                       : Me === "es"
-                        ? "Añadir otra pista"
-                        : "Adicionar outra trilha",
+                        ? "Crear categoría"
+                        : "Criar categoria",
                   onClick: (event) => {
                     (event.stopPropagation(), addLaneTrack(key));
                   },
@@ -27389,15 +27467,6 @@ r.createElement(
                         ),
                       ),
                     ),
-                    r.createElement(
-                      "button",
-                      {
-                        type: "button",
-                        className: "ghost-button",
-                        onClick: () => setShortcuts(saveShortcuts({ ...SHORTCUT_DEFAULTS })),
-                      },
-                      "Restaurar atalhos padrão",
-                    ),
                     [
                       ["P", H.brushes],
                       ["[ / ]", H.size],
@@ -27415,6 +27484,19 @@ r.createElement(
                         r.createElement("span", null, s),
                         r.createElement("kbd", null, i),
                       ),
+                    ),
+                    r.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "ghost-button shortcuts-reset",
+                        onClick: () => setShortcuts(saveShortcuts({ ...SHORTCUT_DEFAULTS })),
+                      },
+                      Me === "en"
+                        ? "Restore default shortcuts"
+                        : Me === "es"
+                          ? "Restaurar atajos predeterminados"
+                          : "Restaurar atalhos padrão",
                     ),
                   )
                 : Oe === "room"
@@ -27529,7 +27611,7 @@ r.createElement(
                           [
                             [1920, 1080, "Full HD"],
                             [1280, 720, "HD"],
-                            [1080, 1080, "Square"],
+                            [1080, 1080, Me === "en" ? "Square" : Me === "es" ? "Cuadrado" : "Quadrado"],
                             [1080, 1920, "Vertical"],
                             [2048, 2048, "2K"],
                           ].map(([i, s, h]) =>
@@ -28864,8 +28946,8 @@ r.createElement(
                                       ]
                                     : Oe === "edit"
                                       ? [
-                                          [S1, "Undo", Uu],
-                                          [g1, "Redo", ol],
+                                          [S1, Me === "en" ? "Undo" : Me === "es" ? "Deshacer" : "Desfazer", Uu],
+                                          [g1, Me === "en" ? "Redo" : Me === "es" ? "Rehacer" : "Refazer", ol],
                                           [zo, H.copy, Kn],
                                           [zo, H.paste, Jn],
                                           [b1, H.split, qu],
@@ -28878,6 +28960,7 @@ r.createElement(
                                             () => Ve("language"),
                                           ],
                                           [Mi, H.onion, () => Ve("onion")],
+                                          [zp, H.shortcuts, () => Ve("shortcuts")],
                                           [Mo, H.full, () => Ft(!0)],
                                         ]
                                 ).map(([i, s, h]) =>
@@ -30986,6 +31069,12 @@ function FramiaTransformPanel(props) {
       r.createElement(
         "div",
         { className: "section-links" },
+        Object.keys(keys).length === 0 &&
+          r.createElement(
+            "button",
+            { className: "animation-create", onClick: p.onCreate },
+            label("Criar animação", "Create animation", "Crear animación"),
+          ),
         Object.keys(keys).length > 0 &&
           r.createElement(
             "button",
